@@ -1,7 +1,4 @@
-
-from datetime import datetime
-
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 from services.event_service import (
     create_event,
