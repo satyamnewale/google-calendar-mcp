@@ -6,8 +6,7 @@ from services.event_service import (
     delete_event,
     get_event_details,
     postpone_event,
-)
-
+) 
 from services.event_search import (
     search_events,
     find_similar_events,
