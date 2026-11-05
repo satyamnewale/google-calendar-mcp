@@ -27,9 +27,6 @@ from services.calendar_service import list_calendars
 from utils.datetime_utils import (
     parse_datetime,
     resolve_date_expression,
-    get_day_range,
-    get_week_range,
-    get_month_range,
 )
 
 from utils.recurrence_utils import build_recurrence_rule
