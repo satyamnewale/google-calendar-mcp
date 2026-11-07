@@ -5,14 +5,14 @@ description = "google Calendar MCP server"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "fastmcp>=3.4.11",
     "google-api-python-client>=2.201.0",
     "google-auth-httplib2>=0.4.4",
     "google-auth-oauthlib>=1.5.0",
     "python-dateutil>=3.0.0",
     "tzlocal>=5.4.5",
+    "pydantic>=2.14.2",
+    "fastmcp>=4.1.6",
 ]
-
 [dependency-groups]
 dev = [
     "pytest>=9.2.0",
