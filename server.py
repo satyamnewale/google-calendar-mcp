@@ -12,6 +12,9 @@ from services.event_search import (
     find_similar_events,
 )
 
+from typing import Annotated, Literal
+from pydantic import Field
+
 from services.calendar_summary import (
     get_calendar_summary,
 )
@@ -30,6 +33,19 @@ from utils.datetime_utils import (
 
 from utils.recurrence_utils import build_recurrence_rule
 
+from schemas.event_schema import (
+    CreateEventSchema,
+    UpdateEventSchema,
+    DeleteEventSchema,
+    GetEventSchema,
+    PostponeEventSchema,
+    SearchEventsSchema,
+    SimilarEventsSchema,
+    CalendarOverviewSchema,
+    AvailabilitySchema,
+    AvailableSlotsSchema,
+)
+
 
 mcp = FastMCP("Google Calendar MCP")
 
@@ -40,18 +56,129 @@ def parse_optional_datetime(value: str):
 
 @mcp.tool()
 def create_calendar_event(
-    title: str,
-    start: str,
-    end: str = "",
-    description: str = "",
-    location: str = "",
-    all_day: bool = False,
-    recurrence_frequency: str = "",
-    recurrence_interval: int = 1,
-    recurrence_days: list[str] | None = None,
-    reminder_minutes: int = 10,
-    allow_conflict: bool = False,
+    title: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=200,
+            description="Title or subject of the calendar event.",
+        ),
+    ],
+
+    start: Annotated[
+        str,
+        Field(
+            description=(
+                "Start date or datetime of the event. "
+                "Use YYYY-MM-DD for all-day events or ISO datetime for timed events. "
+                "Natural expressions such as tomorrow are also supported."
+            ),
+        ),
+    ],
+
+    end: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description=(
+                "End date or datetime of the event. "
+                "Must use the same event type as start. "
+                "Defaults to one hour after start for timed events."
+            ),
+        ),
+    ] = None,
+
+    description: Annotated[
+        str | None,
+        Field(
+            default=None,
+            max_length=8192,
+            description="Additional information, agenda, or notes associated with the event.",
+        ),
+    ] = None,
+
+    location: Annotated[
+        str | None,
+        Field(
+            default=None,
+            max_length=500,
+            description="Physical address, office location, or online meeting location.",
+        ),
+    ] = None,
+
+    all_day: Annotated[
+        bool,
+        Field(
+            default=False,
+            description="Set True when the event occupies an entire calendar day.",
+        ),
+    ] = False,
+
+    recurrence_frequency: Annotated[
+        Literal["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] | None,
+        Field(
+            default=None,
+            description="Recurrence frequency. Supported values: DAILY, WEEKLY, MONTHLY, YEARLY.",
+        ),
+    ] = None,
+
+    recurrence_interval: Annotated[
+        int,
+        Field(
+            default=1,
+            ge=1,
+            le=365,
+            description="Number of frequency units between recurring events. Requires recurrence_frequency.",
+        ),
+    ] = 1,
+
+    recurrence_days: Annotated[
+        list[Literal["MO", "TU", "WE", "TH", "FR", "SA", "SU"]] | None,
+        Field(
+            default=None,
+            description="Weekdays for recurring events using two-letter codes such as MO, TU, WE.",
+        ),
+    ] = None,
+
+    reminder_minutes: Annotated[
+        int,
+        Field(
+            default=10,
+            ge=0,
+            le=40320,
+            description="Number of minutes before the event to trigger a popup reminder.",
+        ),
+    ] = 10,
+
+    allow_conflict: Annotated[
+        bool,
+        Field(
+            default=False,
+            description="Set True to create the event even when its time overlaps existing events.",
+        ),
+    ] = False,
+
 ) -> dict:
+    """
+    Create a Google Calendar event with optional recurrence,
+    reminders, location and availability checking.
+    """
+
+    # Runtime Pydantic validation
+    payload = CreateEventSchema.model_validate({
+        "title": title,
+        "start": start,
+        "end": end,
+        "description": description,
+        "location": location,
+        "all_day": all_day,
+        "recurrence_frequency": recurrence_frequency,
+        "recurrence_interval": recurrence_interval,
+        "recurrence_days": recurrence_days,
+        "reminder_minutes": reminder_minutes,
+        "allow_conflict": allow_conflict,
+    })
+
     """
     Create a Google Calendar event.
 
