@@ -1,5 +1,5 @@
 from typing import Annotated, Literal
-
+from datetime import date, datetime
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -135,6 +135,41 @@ class CreateEventSchema(StrictSchema):
         ),
     ] = None
 
+    recurrence_count: Annotated[
+        int | None,
+        Field(
+            default=None,
+            ge=0,
+            strict=True,
+            description=(
+                "Number of times to repeat the event. " "Requires recurrence_frequency."
+            ),
+        ),
+    ] = None
+
+    recurrence_until: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description=(
+                "End date or datetime for recurring events. "
+                "Must use the same event type as start. "
+                "Requires recurrence_frequency."
+            ),
+        ),
+    ] = None
+
+    recurrence_indefinite: Annotated[
+        bool,
+        Field(
+            default=False,
+            description=(
+                "Set True to repeat the event indefinitely. "
+                "Requires recurrence_frequency."
+            ),
+        ),
+    ] = False
+
     reminder_minutes: Annotated[
         int,
         Field(
@@ -160,21 +195,74 @@ class CreateEventSchema(StrictSchema):
         ),
     ] = False
 
-    @field_validator("recurrence_days")
+    @field_validator("recurrence_until")
     @classmethod
-    def validate_recurrence_days(cls, days):
-        if days is not None and len(days) != len(set(days)):
-            raise ValueError("Recurrence days cannot contain duplicates.")
-        return days
+    def validate_recurrence_until(cls, value):
+
+        if value is None:
+            return value
+
+        value = value.strip()
+
+        if not value:
+            raise ValueError("Recurrence end date cannot be empty.")
+
+        try:
+            date.fromisoformat(value)
+            return value
+        except ValueError:
+            pass
+
+        try:
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return value
+        except ValueError as exc:
+            raise ValueError(
+                "recurrence_until must be an ISO date " "(YYYY-MM-DD) or ISO datetime."
+            ) from exc
 
     @model_validator(mode="after")
     def validate_recurrence(self):
+
+        has_count = self.recurrence_count is not None
+        has_until = self.recurrence_until is not None
+        is_indefinite = self.recurrence_indefinite
+
+        termination_options = sum(
+            [
+                has_count,
+                has_until,
+                is_indefinite,
+            ]
+        )
+
         if self.recurrence_frequency is None:
+
             if self.recurrence_days:
                 raise ValueError("recurrence_days requires recurrence_frequency.")
 
             if self.recurrence_interval != 1:
                 raise ValueError("recurrence_interval requires recurrence_frequency.")
+
+            if termination_options:
+                raise ValueError(
+                    "Recurrence termination settings require " "recurrence_frequency."
+                )
+
+            return self
+
+        # Exactly one termination condition is mandatory.
+        if termination_options != 1:
+            raise ValueError(
+                "A recurring event must specify exactly one of: "
+                "recurrence_count, recurrence_until, "
+                "or recurrence_indefinite=True."
+            )
+
+        if self.recurrence_days and self.recurrence_frequency != "WEEKLY":
+            raise ValueError(
+                "recurrence_days is supported only with WEEKLY recurrence."
+            )
 
         return self
 

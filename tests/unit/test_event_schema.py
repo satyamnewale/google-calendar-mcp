@@ -15,6 +15,99 @@ from schemas.event_schema import (
     AvailableSlotsSchema,
 )
 
+from utils.recurrence_utils import build_recurrence_rule
+
+@pytest.mark.unit
+def get_payload(**overrides):
+
+    payload = {
+        "title": "Workout Prep",
+        "start": "2026-11-09T15:30:00+05:30",
+        "recurrence_frequency": "DAILY",
+        "recurrence_interval": 1,
+        "recurrence_count": 21,
+    }
+
+    payload.update(overrides)
+
+    return payload
+
+@pytest.mark.unit
+def test_valid_daily_recurrence_count():
+
+    event = CreateEventSchema.model_validate(
+        get_payload()
+    )
+
+    assert event.recurrence_count == 21
+
+@pytest.mark.unit
+def test_recurrence_requires_termination():
+
+    with pytest.raises(ValidationError):
+
+        CreateEventSchema.model_validate(
+            get_payload(recurrence_count=None)
+        )
+
+@pytest.mark.unit
+def test_recurrence_count_and_until_mutually_exclusive():
+
+    with pytest.raises(ValidationError):
+
+        CreateEventSchema.model_validate(
+            get_payload(
+                recurrence_count=21,
+                recurrence_until="2026-11-29",
+            )
+        )
+
+@pytest.mark.unit
+def test_indefinite_recurrence_requires_explicit_flag():
+
+    event = CreateEventSchema.model_validate(
+        get_payload(
+            recurrence_count=None,
+            recurrence_indefinite=True,
+        )
+    )
+
+    assert event.recurrence_indefinite is True
+
+@pytest.mark.unit
+def test_boolean_not_accepted_as_recurrence_count():
+
+    with pytest.raises(ValidationError):
+
+        CreateEventSchema.model_validate(
+            get_payload(recurrence_count=True)
+        )
+
+@pytest.mark.unit
+def test_daily_recurrence_rule_count():
+
+    rule = build_recurrence_rule(
+        frequency="DAILY",
+        interval=1,
+        count=21,
+    )
+
+    assert rule == [
+        "RRULE:FREQ=DAILY;INTERVAL=1;COUNT=21"
+    ]
+
+@pytest.mark.unit
+def test_daily_recurrence_rule_until():
+
+    rule = build_recurrence_rule(
+        frequency="DAILY",
+        interval=1,
+        until="2026-11-29",
+    )
+
+    assert rule[0].startswith(
+        "RRULE:FREQ=DAILY;INTERVAL=1;UNTIL="
+    )
 
 # --------------------------------------------------
 # CREATE EVENT SCHEMA
@@ -86,16 +179,19 @@ def test_create_event_invalid_reminder():
 
 @pytest.mark.unit
 def test_create_event_recurrence_days():
+
     payload = {
         "title": "Meeting",
         "start": "2026-11-10T10:00:00+05:30",
         "recurrence_frequency": "WEEKLY",
         "recurrence_days": ["MO", "WE"],
+        "recurrence_count": 10,
     }
 
     result = CreateEventSchema.model_validate(payload)
 
     assert result.recurrence_days == ["MO", "WE"]
+    assert result.recurrence_count == 10
 
 
 # --------------------------------------------------

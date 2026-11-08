@@ -149,6 +149,39 @@ def create_calendar_event(
             description="Weekdays for recurring events using two-letter codes such as MO, TU, WE.",
         ),
     ] = None,
+    recurrence_count: Annotated[
+        int | None,
+        Field(
+            default=None,
+            gt=0,
+            strict=True,
+            description=(
+                "Total number of occurrences, including the first occurrence. "
+                "For example, 21 means 21 events in total. "
+                "Mutually exclusive with recurrence_until."
+            ),
+        ),
+    ] = None,
+    recurrence_until: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description=(
+                "Last occurrence date (inclusive), in YYYY-MM-DD format, "
+                "or an ISO datetime. Mutually exclusive with recurrence_count."
+            ),
+        ),
+    ] = None,
+    recurrence_indefinite: Annotated[
+        bool,
+        Field(
+            default=False,
+            description=(
+                "Set True only when the user explicitly requests "
+                "an unlimited recurring event."
+            ),
+        ),
+    ] = False,
     reminder_minutes: Annotated[
         int,
         Field(
@@ -167,21 +200,27 @@ def create_calendar_event(
     ] = False,
 ) -> dict:
     """
-    Create a new Google Calendar event with a specified title, start time,
-    and optional end time, description, location, and reminder.
+    Create a new Google Calendar event.
 
-    Supports both all-day and timed events, including recurring events
-    with daily, weekly, monthly, or yearly frequency.
+    Supports timed, all-day, multi-day, and recurring events.
 
-    Before creating a timed event, the tool checks calendar availability
-    to identify scheduling conflicts. If a conflict exists, it returns
-    the conflicting periods and requests confirmation before proceeding.
+    For recurring events:
+    - recurrence_frequency specifies the repetition frequency.
+    - recurrence_interval specifies the interval between occurrences.
+    - recurrence_count specifies the total number of occurrences,
+      including the first occurrence.
+    - recurrence_until specifies the inclusive final occurrence date.
+    - recurrence_indefinite=True permits an unlimited series,
+      only when explicitly requested by the user.
 
-    Set allow_conflict=True only when the user explicitly agrees to
-    schedule the event despite existing conflicts.
+    Exactly one recurrence termination condition must be supplied.
 
-    If the end time is omitted, a default one-hour duration is used
-    for timed events.
+    The start and end parameters define the duration of ONE occurrence.
+    They must never be used to represent the entire recurrence period.
+
+    If end is omitted, timed events default to one hour.
+
+    Before creating timed events, calendar availability is checked.
     """
 
     # Pydantic validation
@@ -196,6 +235,9 @@ def create_calendar_event(
             "recurrence_frequency": recurrence_frequency,
             "recurrence_interval": recurrence_interval,
             "recurrence_days": recurrence_days,
+            "recurrence_count": recurrence_count,
+            "recurrence_until": recurrence_until,
+            "recurrence_indefinite": recurrence_indefinite,
             "reminder_minutes": reminder_minutes,
             "allow_conflict": allow_conflict,
         }
@@ -215,10 +257,13 @@ def create_calendar_event(
     recurrence = None
 
     if payload.recurrence_frequency:
+
         recurrence = build_recurrence_rule(
             frequency=payload.recurrence_frequency,
             interval=payload.recurrence_interval,
             byday=payload.recurrence_days,
+            count=payload.recurrence_count,
+            until=payload.recurrence_until,
         )
 
     # Check availability for timed events
@@ -468,11 +513,7 @@ def postpone_calendar_event(
         parsed_start = parse_datetime(payload.new_start)
         parsed_end = parse_datetime(payload.new_end)
 
-    return postpone_event(
-        payload.event_id,
-        parsed_start,
-        parsed_end
-    )
+    return postpone_event(payload.event_id, parsed_start, parsed_end)
 
 
 # ==================================================
