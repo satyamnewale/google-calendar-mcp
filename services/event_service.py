@@ -13,6 +13,7 @@ from utils.validators import (
     validate_event_time,
     validate_date_range,
     validate_event_update,
+    validate_reminder,
 )
 
 from utils.datetime_utils import to_rfc3339
@@ -36,13 +37,14 @@ def create_event(
     reminder_minutes: int = DEFAULT_REMINDER_MINUTES,
 ):
     title = validate_title(title)
-
-    if reminder_minutes < 0:
-        raise ValueError("Reminder minutes cannot be negative.")
+    validate_reminder(reminder_minutes)
 
     if all_day:
         if isinstance(start, datetime):
             start = start.date()
+
+        if not isinstance(start, date):
+            raise ValueError("All-day events require a date start.")
 
         if end is None:
             end = start + timedelta(days=1)

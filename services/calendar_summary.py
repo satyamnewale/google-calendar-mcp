@@ -1,4 +1,3 @@
-
 from collections import Counter
 
 from services.event_search import (
@@ -11,15 +10,18 @@ from services.calendar_service import list_events_in_range
 
 
 def count_events_in_range(start_date, end_date):
+    """Count non-cancelled events within a date range."""
     events = list_events_in_range(start_date, end_date)
 
     return sum(
-        1 for event in events
+        1
+        for event in events
         if event.get("status") != "cancelled"
     )
 
 
 def get_daily_schedule(day: str):
+    """Return a daily schedule."""
     events = get_event_for_day(day)
 
     return {
@@ -30,6 +32,7 @@ def get_daily_schedule(day: str):
 
 
 def get_weekly_schedule(week: str | None = None):
+    """Return a weekly schedule grouped by date."""
     events = get_event_for_week(week)
 
     grouped = {}
@@ -50,16 +53,17 @@ def get_weekly_schedule(week: str | None = None):
 
 
 def get_monthly_overview(month: str | None = None):
+    """Return a monthly event count grouped by date."""
     events = get_event_for_month(month)
 
     counts = Counter()
 
     for event in events:
         start = event.get("start", {})
-        event_date = start.get(
-            "dateTime",
-            start.get("date", "")
-        )[:10]
+
+        event_date = (
+            start.get("dateTime", start.get("date", ""))[:10]
+        )
 
         counts[event_date] += 1
 
@@ -73,6 +77,7 @@ def get_calendar_summary(
     period: str,
     value: str | None = None,
 ):
+    """Return a daily, weekly, or monthly calendar overview."""
     period = period.lower()
 
     if period == "day":
@@ -84,6 +89,4 @@ def get_calendar_summary(
     if period == "month":
         return get_monthly_overview(value)
 
-    raise ValueError(
-        "Period must be day, week, or month."
-    )
+    raise ValueError("Period must be day, week, or month.")

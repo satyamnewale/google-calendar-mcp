@@ -35,9 +35,10 @@ from services.calendar_service import list_calendars
 # --------------------------------------------------
 # UTILITIES
 # --------------------------------------------------
-
 from utils.datetime_utils import (
     parse_datetime,
+    parse_date,
+    parse_date_or_datetime,
     resolve_date_expression,
 )
 
@@ -199,21 +200,14 @@ def create_calendar_event(
     )
 
     # Resolve start
-    start_value = (
-        resolve_date_expression(payload.start)
-        if payload.all_day
-        else parse_datetime(payload.start)
-    )
+    start_value = parse_date_or_datetime(payload.start, all_day=payload.all_day)
 
     # Resolve end
-    if payload.end:
-        end_value = (
-            resolve_date_expression(payload.end)
-            if payload.all_day
-            else parse_datetime(payload.end)
-        )
-    else:
-        end_value = None
+    end_value = (
+        parse_date_or_datetime(payload.end, all_day=payload.all_day)
+        if payload.end
+        else None
+    )
 
     # Build recurrence
     recurrence = None
@@ -451,10 +445,21 @@ def postpone_calendar_event(
         }
     )
 
+    # The service checks whether the existing event is all-day.
+    # Parse both values here as dates or datetimes based on the existing event.
+    existing = get_event_details(payload.event_id)
+
+    if "date" in existing.get("start", {}):
+        parsed_start = resolve_date_expression(payload.new_start)
+        parsed_end = resolve_date_expression(payload.new_end)
+    else:
+        parsed_start = parse_datetime(payload.new_start)
+        parsed_end = parse_datetime(payload.new_end)
+
     return postpone_event(
         payload.event_id,
-        parse_datetime(payload.new_start),
-        parse_datetime(payload.new_end),
+        parsed_start,
+        parsed_end
     )
 
 
