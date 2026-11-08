@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 
 from fastmcp import FastMCP
 from pydantic import Field
+from errors.error_handler import handle_tool_errors
 
 # --------------------------------------------------
 # SERVICES
@@ -35,9 +36,10 @@ from services.calendar_service import list_calendars
 # --------------------------------------------------
 # UTILITIES
 # --------------------------------------------------
-
 from utils.datetime_utils import (
     parse_datetime,
+    parse_date,
+    parse_date_or_datetime,
     resolve_date_expression,
 )
 
@@ -60,7 +62,7 @@ from schemas.event_schema import (
     AvailableSlotsSchema,
 )
 
-mcp = FastMCP("Google Calendar MCP")
+mcp = FastMCP("Google Calendar MCP", mask_error_details=True)
 
 
 # ==================================================
@@ -69,6 +71,7 @@ mcp = FastMCP("Google Calendar MCP")
 
 
 @mcp.tool()
+@handle_tool_errors
 def create_calendar_event(
     title: Annotated[
         str,
@@ -199,21 +202,14 @@ def create_calendar_event(
     )
 
     # Resolve start
-    start_value = (
-        resolve_date_expression(payload.start)
-        if payload.all_day
-        else parse_datetime(payload.start)
-    )
+    start_value = parse_date_or_datetime(payload.start, all_day=payload.all_day)
 
     # Resolve end
-    if payload.end:
-        end_value = (
-            resolve_date_expression(payload.end)
-            if payload.all_day
-            else parse_datetime(payload.end)
-        )
-    else:
-        end_value = None
+    end_value = (
+        parse_date_or_datetime(payload.end, all_day=payload.all_day)
+        if payload.end
+        else None
+    )
 
     # Build recurrence
     recurrence = None
@@ -270,6 +266,7 @@ def create_calendar_event(
 
 
 @mcp.tool()
+@handle_tool_errors
 def edit_calendar_event(
     event_id: Annotated[
         str,
@@ -326,6 +323,7 @@ def edit_calendar_event(
 
 
 @mcp.tool()
+@handle_tool_errors
 def remove_calendar_event(
     event_id: Annotated[
         str,
@@ -357,6 +355,12 @@ def remove_calendar_event(
         }
     )
 
+    if not payload.confirmed:
+        raise ValueError(
+            "Deletion requires explicit user confirmation. "
+            "Set confirmed=True after the user approves."
+        )
+
     return delete_event(
         payload.event_id,
         payload.confirmed,
@@ -369,6 +373,7 @@ def remove_calendar_event(
 
 
 @mcp.tool()
+@handle_tool_errors
 def get_calendar_event(
     event_id: Annotated[
         str,
@@ -405,6 +410,7 @@ def get_calendar_event(
 
 
 @mcp.tool()
+@handle_tool_errors
 def postpone_calendar_event(
     event_id: Annotated[
         str,
@@ -451,10 +457,21 @@ def postpone_calendar_event(
         }
     )
 
+    # The service checks whether the existing event is all-day.
+    # Parse both values here as dates or datetimes based on the existing event.
+    existing = get_event_details(payload.event_id)
+
+    if "date" in existing.get("start", {}):
+        parsed_start = resolve_date_expression(payload.new_start)
+        parsed_end = resolve_date_expression(payload.new_end)
+    else:
+        parsed_start = parse_datetime(payload.new_start)
+        parsed_end = parse_datetime(payload.new_end)
+
     return postpone_event(
         payload.event_id,
-        parse_datetime(payload.new_start),
-        parse_datetime(payload.new_end),
+        parsed_start,
+        parsed_end
     )
 
 
@@ -464,6 +481,7 @@ def postpone_calendar_event(
 
 
 @mcp.tool()
+@handle_tool_errors
 def find_calendar_events(
     start: Annotated[
         str,
@@ -527,6 +545,7 @@ def find_calendar_events(
 
 
 @mcp.tool()
+@handle_tool_errors
 def find_similar_calendar_events(
     title: Annotated[
         str,
@@ -584,6 +603,7 @@ def find_similar_calendar_events(
 
 
 @mcp.tool()
+@handle_tool_errors
 def get_calendar_overview(
     period: Annotated[
         Literal["day", "week", "month"],
@@ -634,6 +654,7 @@ def get_calendar_overview(
 
 
 @mcp.tool()
+@handle_tool_errors
 def check_calendar_availability(
     start: Annotated[
         str,
@@ -684,6 +705,7 @@ def check_calendar_availability(
 
 
 @mcp.tool()
+@handle_tool_errors
 def suggest_available_slots(
     start: Annotated[
         str,
@@ -748,6 +770,7 @@ def suggest_available_slots(
 
 
 @mcp.tool()
+@handle_tool_errors
 def get_calendar_list() -> list:
     """
     Retrieve the list of Google Calendars accessible to the authenticated

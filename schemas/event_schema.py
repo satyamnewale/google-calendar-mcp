@@ -1,4 +1,3 @@
-
 from typing import Annotated, Literal
 
 from pydantic import (
@@ -9,10 +8,10 @@ from pydantic import (
     model_validator,
 )
 
-
 # --------------------------------------------------
 # COMMON CONFIGURATION
 # --------------------------------------------------
+
 
 class StrictSchema(BaseModel):
     model_config = ConfigDict(
@@ -24,6 +23,7 @@ class StrictSchema(BaseModel):
 # --------------------------------------------------
 # 1. CREATE EVENT
 # --------------------------------------------------
+
 
 class CreateEventSchema(StrictSchema):
 
@@ -171,14 +171,10 @@ class CreateEventSchema(StrictSchema):
     def validate_recurrence(self):
         if self.recurrence_frequency is None:
             if self.recurrence_days:
-                raise ValueError(
-                    "recurrence_days requires recurrence_frequency."
-                )
+                raise ValueError("recurrence_days requires recurrence_frequency.")
 
             if self.recurrence_interval != 1:
-                raise ValueError(
-                    "recurrence_interval requires recurrence_frequency."
-                )
+                raise ValueError("recurrence_interval requires recurrence_frequency.")
 
         return self
 
@@ -186,6 +182,7 @@ class CreateEventSchema(StrictSchema):
 # --------------------------------------------------
 # 2. UPDATE EVENT
 # --------------------------------------------------
+
 
 class UpdateEventSchema(StrictSchema):
 
@@ -212,17 +209,36 @@ class UpdateEventSchema(StrictSchema):
         ),
     ]
 
-    @field_validator("event_id")
+    @field_validator("updates")
     @classmethod
-    def validate_event_id(cls, value):
-        if not value.strip():
-            raise ValueError("Event ID cannot be empty.")
-        return value
+    def validate_update_fields(cls, updates):
+
+        allowed_fields = {
+            "summary",
+            "description",
+            "location",
+            "start",
+            "end",
+            "reminders",
+            "recurrence",
+            "visibility",
+            "transparency",
+        }
+
+        invalid_fields = set(updates.keys()) - allowed_fields
+
+        if invalid_fields:
+            raise ValueError(
+                f"Unsupported update fields: {', '.join(sorted(invalid_fields))}"
+            )
+
+        return updates
 
 
 # --------------------------------------------------
 # 3. DELETE EVENT
 # --------------------------------------------------
+
 
 class DeleteEventSchema(StrictSchema):
 
@@ -253,6 +269,7 @@ class DeleteEventSchema(StrictSchema):
 # 4. GET EVENT DETAILS
 # --------------------------------------------------
 
+
 class GetEventSchema(StrictSchema):
 
     event_id: Annotated[
@@ -270,6 +287,7 @@ class GetEventSchema(StrictSchema):
 # --------------------------------------------------
 # 5. POSTPONE EVENT
 # --------------------------------------------------
+
 
 class PostponeEventSchema(StrictSchema):
 
@@ -312,6 +330,7 @@ class PostponeEventSchema(StrictSchema):
 # 6. SEARCH EVENTS
 # --------------------------------------------------
 
+
 class SearchEventsSchema(StrictSchema):
 
     start: Annotated[
@@ -352,6 +371,7 @@ class SearchEventsSchema(StrictSchema):
 # --------------------------------------------------
 # 7. FIND SIMILAR EVENTS
 # --------------------------------------------------
+
 
 class SimilarEventsSchema(StrictSchema):
 
@@ -394,6 +414,7 @@ class SimilarEventsSchema(StrictSchema):
 # 8. CALENDAR OVERVIEW
 # --------------------------------------------------
 
+
 class CalendarOverviewSchema(StrictSchema):
 
     period: Annotated[
@@ -423,6 +444,7 @@ class CalendarOverviewSchema(StrictSchema):
 # 9. CHECK AVAILABILITY
 # --------------------------------------------------
 
+
 class AvailabilitySchema(StrictSchema):
 
     start: Annotated[
@@ -451,6 +473,7 @@ class AvailabilitySchema(StrictSchema):
 # --------------------------------------------------
 # 10. SUGGEST AVAILABLE SLOTS
 # --------------------------------------------------
+
 
 class AvailableSlotsSchema(StrictSchema):
 

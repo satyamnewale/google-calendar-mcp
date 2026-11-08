@@ -1,5 +1,5 @@
 [project]
-name = "calender-mcp"
+name = "google-calendar-mcp"
 version = "0.1.0"
 description = "google Calendar MCP server"
 readme = "README.md"
@@ -13,7 +13,30 @@ dependencies = [
     "pydantic>=2.14.2",
     "fastmcp>=4.1.6",
 ]
+
 [dependency-groups]
 dev = [
-    "pytest>=9.2.0",
+    "pytest",
+    "pytest-mock",
+]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+
+testpaths = ["tests"]
+
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--strict-config",
+]
+
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "services: Service-layer tests",
 ]

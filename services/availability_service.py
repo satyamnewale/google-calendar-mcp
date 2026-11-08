@@ -5,14 +5,17 @@ from auth.google_auth import get_calendar_service
 from config.settings import CALENDAR_ID, TIMEZONE
 
 from utils.datetime_utils import to_rfc3339
-from utils.validators import validate_event_time
+from utils.validators import (
+    validate_event_time,
+    validate_time_range,
+)
 
 
 def check_availability(
     start_date: datetime,
     end_date: datetime,
 ):
-    validate_event_time(start_date, end_date)
+    validate_time_range(start_date, end_date)
 
     service = get_calendar_service()
 
@@ -54,16 +57,19 @@ def find_conflicts(
 
     return result["busy_periods"]
 
-
 def get_available_slots(
     start_date: datetime,
     end_date: datetime,
     duration_minutes: int = 60,
 ):
+    """Return uninterrupted free periods meeting the duration requirement."""
     validate_event_time(start_date, end_date)
 
-    if duration_minutes <= 0:
-        raise ValueError("Duration must be positive.")
+    if not isinstance(duration_minutes, int) or isinstance(duration_minutes, bool):
+        raise ValueError("Duration must be an integer.")
+
+    if not 1 <= duration_minutes <= 1440:
+        raise ValueError("Duration must be between 1 and 1440 minutes.")
 
     busy_periods = find_conflicts(start_date, end_date)
 

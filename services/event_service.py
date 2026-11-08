@@ -13,6 +13,7 @@ from utils.validators import (
     validate_event_time,
     validate_date_range,
     validate_event_update,
+    validate_reminder,
 )
 
 from utils.datetime_utils import to_rfc3339
@@ -24,6 +25,10 @@ from config.settings import (
     TIMEZONE,
 )
 
+from errors.exceptions import (
+    EventAlreadyCancelledError,
+    ConfirmationRequiredError
+)
 
 def create_event(
     title: str,
@@ -36,13 +41,14 @@ def create_event(
     reminder_minutes: int = DEFAULT_REMINDER_MINUTES,
 ):
     title = validate_title(title)
-
-    if reminder_minutes < 0:
-        raise ValueError("Reminder minutes cannot be negative.")
+    validate_reminder(reminder_minutes)
 
     if all_day:
         if isinstance(start, datetime):
             start = start.date()
+
+        if not isinstance(start, date):
+            raise ValueError("All-day events require a date start.")
 
         if end is None:
             end = start + timedelta(days=1)
@@ -115,17 +121,16 @@ def update_event(event_id: str, updates: dict):
 
 def delete_event(event_id: str, confirmed: bool = False):
     if not confirmed:
-        raise ValueError(
-            "Deletion requires explicit user confirmation."
+        raise ConfirmationRequiredError(
+            "Event deletion was not performed because explicit confirmation is missing."
         )
 
     existing = get_event_by_id(event_id)
 
     if existing.get("status") == "cancelled":
-        return {
-            "success": False,
-            "message": "This event is already cancelled.",
-        }
+        raise EventAlreadyCancelledError(
+            "The selected event is cancelled and cannot be postponed."
+        )
 
     return delete_calendar_event(event_id)
 

@@ -7,7 +7,9 @@ from utils.datetime_utils import (
     get_day_range,
     get_week_range,
     get_month_range,
+    parse_datetime,
 )
+from utils.validators import validate_time_range
 
 from config.settings import SIMILARITY_THRESHOLD
 
@@ -17,21 +19,21 @@ def search_events(
     end_date,
     title: str | None = None,
 ):
+    """Search events within a date range, optionally filtering by title."""
+    validate_time_range(start_date, end_date)
+
     events = list_events_in_range(start_date, end_date)
 
-    if title is None:
+    if title is None or not title.strip():
         return events
 
     query = title.strip().casefold()
 
-    if not query:
-        return events
-
     return [
-        event for event in events
+        event
+        for event in events
         if query in event.get("summary", "").casefold()
     ]
-
 
 def get_event_for_day(day: str):
     start, end = get_day_range(day)
@@ -60,6 +62,7 @@ def find_similar_events(
     if not 0 <= threshold <= 1:
         raise ValueError("Similarity threshold must be between 0 and 1.")
 
+    validate_time_range(start_date, end_date)
     events = list_events_in_range(start_date, end_date)
 
     query = title.casefold().strip()
