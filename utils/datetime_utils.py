@@ -52,6 +52,10 @@ def parse_date(value: str | date) -> date:
 
 def resolve_date_expression(expression: str | date) -> date:
     """Resolve common natural date expressions into a date."""
+
+    if isinstance(expression, datetime):
+        return expression.date()
+
     if isinstance(expression, date):
         return expression
 
@@ -80,7 +84,10 @@ def resolve_date_expression(expression: str | date) -> date:
         first = today.replace(day=1)
 
         if first.month == 12:
-            return first.replace(year=first.year + 1, month=1)
+            return first.replace(
+                year=first.year + 1,
+                month=1,
+            )
 
         return first.replace(month=first.month + 1)
 
@@ -94,27 +101,47 @@ def resolve_date_expression(expression: str | date) -> date:
         "sunday": 6,
     }
 
+    # Explicit "next Monday" means the next occurrence,
+    # not necessarily the Monday of the following calendar week.
     if text.startswith("next "):
+
         day_name = text[5:].strip()
 
         if day_name in weekdays:
-            target = weekdays[day_name]
-            days_ahead = (target - today.weekday()) % 7
 
-            # Next Monday means the Monday of the following week.
-            return today + timedelta(days=days_ahead + (7 if days_ahead == 0 else 7))
+            target = weekdays[day_name]
+
+            days_ahead = (
+                target - today.weekday()
+            ) % 7
+
+            if days_ahead == 0:
+                days_ahead = 7
+
+            return today + timedelta(days=days_ahead)
 
     if text.startswith("this "):
+
         day_name = text[5:].strip()
 
         if day_name in weekdays:
+
             target = weekdays[day_name]
-            days_ahead = (target - today.weekday()) % 7
+
+            days_ahead = (
+                target - today.weekday()
+            ) % 7
+
             return today + timedelta(days=days_ahead)
 
     if text in weekdays:
+
         target = weekdays[text]
-        days_ahead = (target - today.weekday()) % 7
+
+        days_ahead = (
+            target - today.weekday()
+        ) % 7
+
         return today + timedelta(days=days_ahead)
 
     return parse_date(expression)

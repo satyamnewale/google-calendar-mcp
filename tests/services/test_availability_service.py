@@ -6,7 +6,77 @@ import pytest
 
 from services import availability_service
 
+from services.availability_service import (
+    find_occurrence_conflicts,
+)
+
 TZ = ZoneInfo("Asia/Kolkata")
+
+
+@pytest.mark.services
+def test_detects_conflict_in_later_recurrence():
+
+    occurrences = [
+        (
+            datetime(2026, 11, 9, 15, 30, tzinfo=TZ),
+            datetime(2026, 11, 9, 16, 30, tzinfo=TZ),
+        ),
+        (
+            datetime(2026, 11, 10, 15, 30, tzinfo=TZ),
+            datetime(2026, 11, 10, 16, 30, tzinfo=TZ),
+        ),
+        (
+            datetime(2026, 11, 11, 15, 30, tzinfo=TZ),
+            datetime(2026, 11, 11, 16, 30, tzinfo=TZ),
+        ),
+    ]
+
+    busy_periods = [
+        {
+            "start": "2026-11-10T15:45:00+05:30",
+            "end": "2026-11-10T16:00:00+05:30",
+        }
+    ]
+
+    conflicts = find_occurrence_conflicts(
+        occurrences,
+        busy_periods,
+    )
+
+    assert len(conflicts) == 1
+
+    assert conflicts[0]["occurrence"]["start"].startswith(
+        "2026-11-10"
+    )
+
+
+@pytest.mark.services
+def test_no_conflict_when_busy_period_is_between_occurrences():
+
+    occurrences = [
+        (
+            datetime(2026, 11, 9, 15, 30, tzinfo=TZ),
+            datetime(2026, 11, 9, 16, 30, tzinfo=TZ),
+        ),
+        (
+            datetime(2026, 11, 10, 15, 30, tzinfo=TZ),
+            datetime(2026, 11, 10, 16, 30, tzinfo=TZ),
+        ),
+    ]
+
+    busy_periods = [
+        {
+            "start": "2026-11-09T18:00:00+05:30",
+            "end": "2026-11-09T19:00:00+05:30",
+        }
+    ]
+
+    conflicts = find_occurrence_conflicts(
+        occurrences,
+        busy_periods,
+    )
+
+    assert conflicts == []
 
 @pytest.mark.services
 def dt(hour, minute=0):

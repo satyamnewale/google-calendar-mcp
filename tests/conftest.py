@@ -24,6 +24,7 @@ def mock_calendar_service():
 
     events.get.return_value.execute.return_value = {
         "id": "test_event_001",
+        "etag": '"test-etag-001"',
         "summary": "Team Meeting",
         "description": "Weekly team discussion",
         "location": "Office",
@@ -75,6 +76,7 @@ def sample_timed_event():
 
     return {
         "id": "test_event_001",
+        "etag": '"test-etag-001"',
         "summary": "Team Meeting",
         "description": "Weekly team discussion",
         "location": "Office",

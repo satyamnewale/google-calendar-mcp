@@ -54,3 +54,14 @@ class CalendarServiceUnavailableError(CalendarError):
 class CalendarNetworkError(CalendarError):
     code = "NETWORK_ERROR"
     retryable = True
+
+class CalendarConcurrencyError(CalendarError):
+    """The calendar event changed after it was retrieved."""
+
+    code = "EVENT_MODIFIED_CONCURRENTLY"
+
+
+class CalendarResultLimitExceededError(CalendarError):
+    """The requested result set exceeds the configured retrieval limit."""
+
+    code = "RESULT_LIMIT_EXCEEDED"

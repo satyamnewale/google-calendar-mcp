@@ -162,15 +162,16 @@ def test_delete_event_deletes_confirmed_active_event(monkeypatch):
         lambda event_id: {"id": event_id, "status": "confirmed"},
     )
     deleted = {}
-    def delete(event_id):
+    def delete(event_id, existing_event = None):
         deleted["id"] = event_id
+        deleted["existing_event"] = existing_event
         return {"success": True, "event_id": event_id}
     monkeypatch.setattr(event_service, "delete_calendar_event", delete)
 
     result = event_service.delete_event("event_001", confirmed=True)
 
     assert deleted["id"] == "event_001"
-    assert result["success"] is True
+    assert deleted["existing_event"]["status"] == "confirmed"
 
 @pytest.mark.services
 def test_delete_event_rejects_already_cancelled_event(monkeypatch):

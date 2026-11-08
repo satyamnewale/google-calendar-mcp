@@ -23,8 +23,9 @@ from errors.exceptions import (
     CalendarQuotaExceededError,
     CalendarServiceUnavailableError,
     CalendarNetworkError,
+    CalendarConcurrencyError,
+    CalendarResultLimitExceededError,
 )
-
 
 logger = logging.getLogger("google_calendar_mcp")
 
@@ -171,6 +172,19 @@ def handle_google_api_error(exc: HttpError) -> str:
             retryable=True,
         )
 
+    if status == 412:
+        return create_error_response(
+            code="EVENT_MODIFIED_CONCURRENTLY",
+            message=(
+                "The event changed after it was retrieved. "
+                "The requested modification or deletion was not applied."
+            ),
+            action=(
+                "Retrieve the latest event details, reconcile the user's "
+                "requested changes, and ask for confirmation again when needed."
+            ),
+        )
+
     return create_error_response(
         code="GOOGLE_API_ERROR",
         message="The Google Calendar API could not complete the requested operation.",
@@ -184,32 +198,17 @@ def handle_application_error(exc: CalendarError) -> str:
     code = getattr(exc, "code", "CALENDAR_ERROR")
 
     action_map = {
-        "EVENT_NOT_FOUND":
-            "Search for the event again and verify its event ID.",
-
-        "EVENT_ALREADY_CANCELLED":
-            "No deletion is necessary because the event is already cancelled.",
-
-        "EVENT_CONFLICT":
-            "Choose another time or obtain explicit confirmation to schedule despite the conflict.",
-
-        "CONFIRMATION_REQUIRED":
-            "Ask the user for explicit confirmation before retrying the deletion.",
-
-        "AUTHENTICATION_REQUIRED":
-            "Reconnect the Google account and refresh OAuth credentials.",
-
-        "INSUFFICIENT_PERMISSIONS":
-            "Check Google Calendar permissions and required OAuth scopes.",
-
-        "API_QUOTA_EXCEEDED":
-            "Wait before retrying. Reduce repeated API calls if the issue persists.",
-
-        "CALENDAR_SERVICE_UNAVAILABLE":
-            "Retry after a short delay.",
-
-        "NETWORK_ERROR":
-            "Check network connectivity and retry.",
+        "EVENT_NOT_FOUND": "Search for the event again and verify its event ID.",
+        "EVENT_ALREADY_CANCELLED": "No deletion is necessary because the event is already cancelled.",
+        "EVENT_CONFLICT": "Choose another time or obtain explicit confirmation to schedule despite the conflict.",
+        "CONFIRMATION_REQUIRED": "Ask the user for explicit confirmation before retrying the deletion.",
+        "AUTHENTICATION_REQUIRED": "Reconnect the Google account and refresh OAuth credentials.",
+        "INSUFFICIENT_PERMISSIONS": "Check Google Calendar permissions and required OAuth scopes.",
+        "API_QUOTA_EXCEEDED": "Wait before retrying. Reduce repeated API calls if the issue persists.",
+        "CALENDAR_SERVICE_UNAVAILABLE": "Retry after a short delay.",
+        "NETWORK_ERROR": "Check network connectivity and retry.",
+        "EVENT_MODIFIED_CONCURRENTLY": "Retrieve the latest event and reconcile the requested change before retrying.",
+        "RESULT_LIMIT_EXCEEDED": "Narrow the date range or adjust the configured event retrieval limit.",
     }
 
     return create_error_response(
@@ -252,6 +251,19 @@ def handle_error(exc: Exception) -> str:
             action="Reconnect the Google account and check its OAuth credentials.",
         )
 
+    if isinstance(exc, FileNotFoundError):
+    
+            logger.error("Required OAuth configuration file is missing.")
+    
+            return create_error_response(
+                code="OAUTH_CONFIGURATION_MISSING",
+                message=("The Google OAuth client credentials file is missing."),
+                action=(
+                    "Configure the Google OAuth client credentials "
+                    "for this server instance."
+                ),
+            )
+    
     if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
         return create_error_response(
             code="NETWORK_ERROR",

@@ -1,17 +1,20 @@
+
+import asyncio
+import inspect
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
 import server
-import asyncio
-import inspect
 
 
 TZ = ZoneInfo("Asia/Kolkata")
+
 START = "2026-11-10T10:00:00+05:30"
 END = "2026-11-10T11:00:00+05:30"
+
 NEW_START = "2026-11-12T10:00:00+05:30"
 NEW_END = "2026-11-12T11:00:00+05:30"
 
@@ -55,14 +58,23 @@ def test_server_has_expected_tools():
 # --------------------------------------------------
 
 def test_create_calendar_event_valid_timed_event():
-    expected_event = {"id": "event_001", "summary": "Team Meeting"}
+    expected_event = {
+        "id": "event_001",
+        "summary": "Team Meeting",
+    }
 
     with (
-        patch("server.check_availability", return_value={
-            "available": True,
-            "busy_periods": [],
-        }) as mock_availability,
-        patch("server.create_event", return_value=expected_event) as mock_create,
+        patch(
+            "server.check_availability",
+            return_value={
+                "available": True,
+                "busy_periods": [],
+            },
+        ) as mock_availability,
+        patch(
+            "server.create_event",
+            return_value=expected_event,
+        ) as mock_create,
     ):
         result = server.create_calendar_event(
             title="Team Meeting",
@@ -72,23 +84,44 @@ def test_create_calendar_event_valid_timed_event():
             location="Office",
         )
 
-    assert result == {"success": True, "event": expected_event}
+    assert result == {
+        "success": True,
+        "event": expected_event,
+        "availability_check": {
+            "complete": True,
+            "occurrences_checked": 1,
+        },
+    }
+
     mock_availability.assert_called_once()
     mock_create.assert_called_once()
 
     kwargs = mock_create.call_args.kwargs
+
     assert kwargs["title"] == "Team Meeting"
     assert kwargs["description"] == "Discuss sprint progress"
     assert kwargs["location"] == "Office"
     assert kwargs["all_day"] is False
 
 
-def test_create_calendar_event_all_day_skips_availability_check():
-    expected_event = {"id": "event_002", "summary": "Project Submission"}
+def test_create_calendar_event_all_day_checks_availability():
+    expected_event = {
+        "id": "event_002",
+        "summary": "Project Submission",
+    }
 
     with (
-        patch("server.check_availability") as mock_availability,
-        patch("server.create_event", return_value=expected_event) as mock_create,
+        patch(
+            "server.check_availability",
+            return_value={
+                "available": True,
+                "busy_periods": [],
+            },
+        ) as mock_availability,
+        patch(
+            "server.create_event",
+            return_value=expected_event,
+        ) as mock_create,
     ):
         result = server.create_calendar_event(
             title="Project Submission",
@@ -97,21 +130,39 @@ def test_create_calendar_event_all_day_skips_availability_check():
             all_day=True,
         )
 
-    assert result == {"success": True, "event": expected_event}
-    mock_availability.assert_not_called()
+    assert result == {
+        "success": True,
+        "event": expected_event,
+        "availability_check": {
+            "complete": True,
+            "occurrences_checked": 1,
+        },
+    }
+
+    mock_availability.assert_called_once()
     mock_create.assert_called_once()
+
     assert mock_create.call_args.kwargs["all_day"] is True
 
 
 def test_create_calendar_event_uses_default_one_hour_end():
-    expected_event = {"id": "event_003", "summary": "Quick Meeting"}
+    expected_event = {
+        "id": "event_003",
+        "summary": "Quick Meeting",
+    }
 
     with (
-        patch("server.check_availability", return_value={
-            "available": True,
-            "busy_periods": [],
-        }) as mock_availability,
-        patch("server.create_event", return_value=expected_event) as mock_create,
+        patch(
+            "server.check_availability",
+            return_value={
+                "available": True,
+                "busy_periods": [],
+            },
+        ) as mock_availability,
+        patch(
+            "server.create_event",
+            return_value=expected_event,
+        ) as mock_create,
     ):
         result = server.create_calendar_event(
             title="Quick Meeting",
@@ -119,20 +170,37 @@ def test_create_calendar_event_uses_default_one_hour_end():
         )
 
     assert result["success"] is True
-    availability_start, availability_end = mock_availability.call_args.args
-    assert (availability_end - availability_start).total_seconds() == 3600
+
+    availability_start, availability_end = (
+        mock_availability.call_args.args
+    )
+
+    assert (
+        availability_end - availability_start
+    ).total_seconds() == 3600
+
     assert mock_create.call_args.kwargs["end"] == availability_end
 
 
 def test_create_calendar_event_returns_conflict_without_creating():
-    busy = [{"start": START, "end": END}]
+    busy = [
+        {
+            "start": START,
+            "end": END,
+        }
+    ]
 
     with (
-        patch("server.check_availability", return_value={
-            "available": False,
-            "busy_periods": busy,
-        }),
-        patch("server.create_event") as mock_create,
+        patch(
+            "server.check_availability",
+            return_value={
+                "available": False,
+                "busy_periods": busy,
+            },
+        ),
+        patch(
+            "server.create_event",
+        ) as mock_create,
     ):
         result = server.create_calendar_event(
             title="Team Meeting",
@@ -143,18 +211,33 @@ def test_create_calendar_event_returns_conflict_without_creating():
     assert result["success"] is False
     assert result["conflict"] is True
     assert result["busy_periods"] == busy
+
     mock_create.assert_not_called()
 
 
 def test_create_calendar_event_allows_conflict_when_user_approves():
-    expected_event = {"id": "event_004", "summary": "Approved Meeting"}
+    expected_event = {
+        "id": "event_004",
+        "summary": "Approved Meeting",
+    }
 
     with (
-        patch("server.check_availability", return_value={
-            "available": False,
-            "busy_periods": [{"start": START, "end": END}],
-        }),
-        patch("server.create_event", return_value=expected_event) as mock_create,
+        patch(
+            "server.check_availability",
+            return_value={
+                "available": False,
+                "busy_periods": [
+                    {
+                        "start": START,
+                        "end": END,
+                    }
+                ],
+            },
+        ),
+        patch(
+            "server.create_event",
+            return_value=expected_event,
+        ) as mock_create,
     ):
         result = server.create_calendar_event(
             title="Approved Meeting",
@@ -163,13 +246,20 @@ def test_create_calendar_event_allows_conflict_when_user_approves():
             allow_conflict=True,
         )
 
-    assert result == {"success": True, "event": expected_event}
+    assert result == {
+        "success": True,
+        "event": expected_event,
+        "availability_check": {
+            "complete": True,
+            "occurrences_checked": 1,
+        },
+    }
+
     mock_create.assert_called_once()
 
 
 @pytest.mark.unit
 def test_create_calendar_event_builds_recurrence_rule():
-
     expected_event = {
         "id": "event_005",
         "summary": "Daily Standup",
@@ -194,7 +284,6 @@ def test_create_calendar_event_builds_recurrence_rule():
             return_value=expected_event,
         ) as mock_create,
     ):
-
         result = server.create_calendar_event(
             title="Daily Standup",
             start=START,
@@ -212,11 +301,13 @@ def test_create_calendar_event_builds_recurrence_rule():
         byday=None,
         count=7,
         until=None,
+        all_day=False,
     )
 
     assert mock_create.call_args.kwargs["recurrence"] == [
         "RRULE:FREQ=DAILY;INTERVAL=1;COUNT=7"
     ]
+
 
 def test_create_calendar_event_rejects_invalid_recurrence_interval():
     with pytest.raises(Exception):
@@ -234,18 +325,29 @@ def test_create_calendar_event_rejects_invalid_recurrence_interval():
 # --------------------------------------------------
 
 def test_edit_calendar_event_valid_input():
-    expected = {"id": "event_001", "summary": "Updated Meeting"}
+    expected = {
+        "id": "event_001",
+        "summary": "Updated Meeting",
+    }
 
-    with patch("server.update_event", return_value=expected) as mock_update:
+    with patch(
+        "server.update_event",
+        return_value=expected,
+    ) as mock_update:
         result = server.edit_calendar_event(
             event_id="event_001",
-            updates={"summary": "Updated Meeting"},
+            updates={
+                "summary": "Updated Meeting",
+            },
         )
 
     assert result == expected
+
     mock_update.assert_called_once_with(
         "event_001",
-        {"summary": "Updated Meeting"},
+        {
+            "summary": "Updated Meeting",
+        },
     )
 
 
@@ -253,7 +355,9 @@ def test_edit_calendar_event_rejects_empty_event_id():
     with pytest.raises(Exception):
         server.edit_calendar_event(
             event_id="",
-            updates={"summary": "Updated Meeting"},
+            updates={
+                "summary": "Updated Meeting",
+            },
         )
 
 
@@ -264,7 +368,9 @@ def test_edit_calendar_event_rejects_unsupported_update_field():
     ):
         server.edit_calendar_event(
             event_id="event_001",
-            updates={"unsupported_field": "value"},
+            updates={
+                "unsupported_field": "value",
+            },
         )
 
     mock_update.assert_not_called()
@@ -288,16 +394,26 @@ def test_remove_calendar_event_requires_confirmation():
 
 
 def test_remove_calendar_event_after_confirmation():
-    expected = {"success": True, "event_id": "event_001"}
+    expected = {
+        "success": True,
+        "event_id": "event_001",
+    }
 
-    with patch("server.delete_event", return_value=expected) as mock_delete:
+    with patch(
+        "server.delete_event",
+        return_value=expected,
+    ) as mock_delete:
         result = server.remove_calendar_event(
             event_id="event_001",
             confirmed=True,
         )
 
     assert result == expected
-    mock_delete.assert_called_once_with("event_001", True)
+
+    mock_delete.assert_called_once_with(
+        "event_001",
+        True,
+    )
 
 
 # --------------------------------------------------
@@ -311,10 +427,14 @@ def test_get_calendar_event_returns_details():
         "status": "confirmed",
     }
 
-    with patch("server.get_event_details", return_value=expected) as mock_get:
+    with patch(
+        "server.get_event_details",
+        return_value=expected,
+    ) as mock_get:
         result = server.get_calendar_event("event_001")
 
     assert result == expected
+
     mock_get.assert_called_once_with("event_001")
 
 
@@ -330,18 +450,40 @@ def test_get_calendar_event_rejects_empty_id():
 def test_postpone_timed_calendar_event():
     existing = {
         "id": "event_001",
-        "start": {"dateTime": START},
-        "end": {"dateTime": END},
+        "start": {
+            "dateTime": START,
+        },
+        "end": {
+            "dateTime": END,
+        },
     }
-    expected = {"id": "event_001", "summary": "Team Meeting"}
 
-    parsed_start = datetime(2026, 11, 12, 10, 0, tzinfo=TZ)
-    parsed_end = datetime(2026, 11, 12, 11, 0, tzinfo=TZ)
+    expected = {
+        "id": "event_001",
+        "summary": "Team Meeting",
+    }
+
+    parsed_start = datetime(
+        2026, 11, 12, 10, 0, tzinfo=TZ
+    )
+
+    parsed_end = datetime(
+        2026, 11, 12, 11, 0, tzinfo=TZ
+    )
 
     with (
-        patch("server.get_event_details", return_value=existing),
-        patch("server.parse_datetime", side_effect=[parsed_start, parsed_end]),
-        patch("server.postpone_event", return_value=expected) as mock_postpone,
+        patch(
+            "server.get_event_details",
+            return_value=existing,
+        ),
+        patch(
+            "server.parse_datetime",
+            side_effect=[parsed_start, parsed_end],
+        ),
+        patch(
+            "server.postpone_event",
+            return_value=expected,
+        ) as mock_postpone,
     ):
         result = server.postpone_calendar_event(
             event_id="event_001",
@@ -350,26 +492,52 @@ def test_postpone_timed_calendar_event():
         )
 
     assert result == expected
+
     mock_postpone.assert_called_once_with(
-        "event_001", parsed_start, parsed_end
+        "event_001",
+        parsed_start,
+        parsed_end,
+        existing_event=existing,
     )
 
 
 def test_postpone_all_day_calendar_event():
     existing = {
         "id": "event_002",
-        "start": {"date": "2026-11-10"},
-        "end": {"date": "2026-11-11"},
+        "start": {
+            "date": "2026-11-10",
+        },
+        "end": {
+            "date": "2026-11-11",
+        },
     }
-    expected = {"id": "event_002", "summary": "Project Submission"}
 
-    parsed_start = datetime(2026, 11, 12, tzinfo=TZ).date()
-    parsed_end = datetime(2026, 11, 13, tzinfo=TZ).date()
+    expected = {
+        "id": "event_002",
+        "summary": "Project Submission",
+    }
+
+    parsed_start = datetime(
+        2026, 11, 12, tzinfo=TZ
+    ).date()
+
+    parsed_end = datetime(
+        2026, 11, 13, tzinfo=TZ
+    ).date()
 
     with (
-        patch("server.get_event_details", return_value=existing),
-        patch("server.resolve_date_expression", side_effect=[parsed_start, parsed_end]),
-        patch("server.postpone_event", return_value=expected) as mock_postpone,
+        patch(
+            "server.get_event_details",
+            return_value=existing,
+        ),
+        patch(
+            "server.resolve_date_expression",
+            side_effect=[parsed_start, parsed_end],
+        ),
+        patch(
+            "server.postpone_event",
+            return_value=expected,
+        ) as mock_postpone,
     ):
         result = server.postpone_calendar_event(
             event_id="event_002",
@@ -378,8 +546,12 @@ def test_postpone_all_day_calendar_event():
         )
 
     assert result == expected
+
     mock_postpone.assert_called_once_with(
-        "event_002", parsed_start, parsed_end
+        "event_002",
+        parsed_start,
+        parsed_end,
+        existing_event=existing,
     )
 
 
@@ -388,13 +560,30 @@ def test_postpone_all_day_calendar_event():
 # --------------------------------------------------
 
 def test_find_calendar_events():
-    expected = [{"id": "event_001", "summary": "Team Meeting"}]
-    parsed_start = datetime(2026, 11, 10, tzinfo=TZ)
-    parsed_end = datetime(2026, 11, 11, tzinfo=TZ)
+    expected = [
+        {
+            "id": "event_001",
+            "summary": "Team Meeting",
+        }
+    ]
+
+    parsed_start = datetime(
+        2026, 11, 10, tzinfo=TZ
+    )
+
+    parsed_end = datetime(
+        2026, 11, 11, tzinfo=TZ
+    )
 
     with (
-        patch("server.parse_datetime", side_effect=[parsed_start, parsed_end]),
-        patch("server.search_events", return_value=expected) as mock_search,
+        patch(
+            "server.parse_datetime",
+            side_effect=[parsed_start, parsed_end],
+        ),
+        patch(
+            "server.search_events",
+            return_value=expected,
+        ) as mock_search,
     ):
         result = server.find_calendar_events(
             start=START,
@@ -403,21 +592,45 @@ def test_find_calendar_events():
         )
 
     assert result == expected
-    mock_search.assert_called_once_with(parsed_start, parsed_end, "Team")
+
+    mock_search.assert_called_once_with(
+        parsed_start,
+        parsed_end,
+        "Team",
+    )
 
 
 def test_find_calendar_events_without_title():
-    parsed_start = datetime(2026, 11, 10, tzinfo=TZ)
-    parsed_end = datetime(2026, 11, 11, tzinfo=TZ)
+    parsed_start = datetime(
+        2026, 11, 10, tzinfo=TZ
+    )
+
+    parsed_end = datetime(
+        2026, 11, 11, tzinfo=TZ
+    )
 
     with (
-        patch("server.parse_datetime", side_effect=[parsed_start, parsed_end]),
-        patch("server.search_events", return_value=[]) as mock_search,
+        patch(
+            "server.parse_datetime",
+            side_effect=[parsed_start, parsed_end],
+        ),
+        patch(
+            "server.search_events",
+            return_value=[],
+        ) as mock_search,
     ):
-        result = server.find_calendar_events(start=START, end=END)
+        result = server.find_calendar_events(
+            start=START,
+            end=END,
+        )
 
     assert result == []
-    mock_search.assert_called_once_with(parsed_start, parsed_end, None)
+
+    mock_search.assert_called_once_with(
+        parsed_start,
+        parsed_end,
+        None,
+    )
 
 
 # --------------------------------------------------
@@ -427,16 +640,31 @@ def test_find_calendar_events_without_title():
 def test_find_similar_calendar_events():
     expected = [
         {
-            "event": {"id": "event_001", "summary": "Team Meeting"},
+            "event": {
+                "id": "event_001",
+                "summary": "Team Meeting",
+            },
             "similarity": 1.0,
         }
     ]
-    parsed_start = datetime(2026, 11, 10, tzinfo=TZ)
-    parsed_end = datetime(2026, 11, 11, tzinfo=TZ)
+
+    parsed_start = datetime(
+        2026, 11, 10, tzinfo=TZ
+    )
+
+    parsed_end = datetime(
+        2026, 11, 11, tzinfo=TZ
+    )
 
     with (
-        patch("server.parse_datetime", side_effect=[parsed_start, parsed_end]),
-        patch("server.find_similar_events", return_value=expected) as mock_similar,
+        patch(
+            "server.parse_datetime",
+            side_effect=[parsed_start, parsed_end],
+        ),
+        patch(
+            "server.find_similar_events",
+            return_value=expected,
+        ) as mock_similar,
     ):
         result = server.find_similar_calendar_events(
             title="Team Meeting",
@@ -445,8 +673,11 @@ def test_find_similar_calendar_events():
         )
 
     assert result == expected
+
     mock_similar.assert_called_once_with(
-        "Team Meeting", parsed_start, parsed_end
+        "Team Meeting",
+        parsed_start,
+        parsed_end,
     )
 
 
@@ -454,23 +685,39 @@ def test_find_similar_calendar_events():
 # 9. GET CALENDAR OVERVIEW
 # --------------------------------------------------
 
-@pytest.mark.parametrize("period", ["day", "week", "month"])
+@pytest.mark.parametrize(
+    "period",
+    ["day", "week", "month"],
+)
 def test_get_calendar_overview(period):
-    expected = {"total_events": 2, "events": []}
+    expected = {
+        "total_events": 2,
+        "events": [],
+    }
 
-    with patch("server.get_calendar_summary", return_value=expected) as mock_summary:
+    with patch(
+        "server.get_calendar_summary",
+        return_value=expected,
+    ) as mock_summary:
         result = server.get_calendar_overview(
             period=period,
             value="2026-11-10",
         )
 
     assert result == expected
-    mock_summary.assert_called_once_with(period, "2026-11-10")
+
+    mock_summary.assert_called_once_with(
+        period,
+        "2026-11-10",
+    )
 
 
 def test_get_calendar_overview_rejects_invalid_period():
     with pytest.raises(Exception):
-        server.get_calendar_overview(period="year", value="2026")
+        server.get_calendar_overview(
+            period="year",
+            value="2026",
+        )
 
 
 # --------------------------------------------------
@@ -478,18 +725,40 @@ def test_get_calendar_overview_rejects_invalid_period():
 # --------------------------------------------------
 
 def test_check_calendar_availability():
-    expected = {"available": True, "busy_periods": []}
-    parsed_start = datetime(2026, 11, 10, 10, 0, tzinfo=TZ)
-    parsed_end = datetime(2026, 11, 10, 11, 0, tzinfo=TZ)
+    expected = {
+        "available": True,
+        "busy_periods": [],
+    }
+
+    parsed_start = datetime(
+        2026, 11, 10, 10, 0, tzinfo=TZ
+    )
+
+    parsed_end = datetime(
+        2026, 11, 10, 11, 0, tzinfo=TZ
+    )
 
     with (
-        patch("server.parse_datetime", side_effect=[parsed_start, parsed_end]),
-        patch("server.check_availability", return_value=expected) as mock_availability,
+        patch(
+            "server.parse_datetime",
+            side_effect=[parsed_start, parsed_end],
+        ),
+        patch(
+            "server.check_availability",
+            return_value=expected,
+        ) as mock_availability,
     ):
-        result = server.check_calendar_availability(start=START, end=END)
+        result = server.check_calendar_availability(
+            start=START,
+            end=END,
+        )
 
     assert result == expected
-    mock_availability.assert_called_once_with(parsed_start, parsed_end)
+
+    mock_availability.assert_called_once_with(
+        parsed_start,
+        parsed_end,
+    )
 
 
 # --------------------------------------------------
@@ -498,14 +767,29 @@ def test_check_calendar_availability():
 
 def test_suggest_available_slots():
     expected = [
-        {"start": START, "end": END},
+        {
+            "start": START,
+            "end": END,
+        }
     ]
-    parsed_start = datetime(2026, 11, 10, 9, 0, tzinfo=TZ)
-    parsed_end = datetime(2026, 11, 10, 17, 0, tzinfo=TZ)
+
+    parsed_start = datetime(
+        2026, 11, 10, 9, 0, tzinfo=TZ
+    )
+
+    parsed_end = datetime(
+        2026, 11, 10, 17, 0, tzinfo=TZ
+    )
 
     with (
-        patch("server.parse_datetime", side_effect=[parsed_start, parsed_end]),
-        patch("server.get_available_slots", return_value=expected) as mock_slots,
+        patch(
+            "server.parse_datetime",
+            side_effect=[parsed_start, parsed_end],
+        ),
+        patch(
+            "server.get_available_slots",
+            return_value=expected,
+        ) as mock_slots,
     ):
         result = server.suggest_available_slots(
             start=START,
@@ -514,7 +798,12 @@ def test_suggest_available_slots():
         )
 
     assert result == expected
-    mock_slots.assert_called_once_with(parsed_start, parsed_end, 45)
+
+    mock_slots.assert_called_once_with(
+        parsed_start,
+        parsed_end,
+        45,
+    )
 
 
 def test_suggest_available_slots_rejects_non_positive_duration():
@@ -546,7 +835,10 @@ def test_get_calendar_list_returns_selected_calendar_fields():
         },
     ]
 
-    with patch("server.list_calendars", return_value=calendars) as mock_list:
+    with patch(
+        "server.list_calendars",
+        return_value=calendars,
+    ) as mock_list:
         result = server.get_calendar_list()
 
     assert result == [
@@ -563,9 +855,13 @@ def test_get_calendar_list_returns_selected_calendar_fields():
             "timeZone": "Asia/Kolkata",
         },
     ]
+
     mock_list.assert_called_once_with()
 
 
 def test_get_calendar_list_returns_empty_list():
-    with patch("server.list_calendars", return_value=[]):
+    with patch(
+        "server.list_calendars",
+        return_value=[],
+    ):
         assert server.get_calendar_list() == []

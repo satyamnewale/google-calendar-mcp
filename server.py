@@ -1,9 +1,10 @@
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Annotated, Literal
 
 from fastmcp import FastMCP
 from pydantic import Field
 from errors.error_handler import handle_tool_errors
+from errors.exceptions import ConfirmationRequiredError
 
 # --------------------------------------------------
 # SERVICES
@@ -29,6 +30,7 @@ from services.calendar_summary import (
 from services.availability_service import (
     check_availability,
     get_available_slots,
+    find_occurrence_conflicts,
 )
 
 from services.calendar_service import list_calendars
@@ -41,9 +43,12 @@ from utils.datetime_utils import (
     parse_date,
     parse_date_or_datetime,
     resolve_date_expression,
+    get_timezone,
 )
-
-from utils.recurrence_utils import build_recurrence_rule
+from utils.recurrence_utils import (
+    build_recurrence_rule,
+    generate_occurrence_windows,
+)
 
 # --------------------------------------------------
 # PYDANTIC SCHEMAS
@@ -154,6 +159,7 @@ def create_calendar_event(
         Field(
             default=None,
             gt=0,
+            le = 500,
             strict=True,
             description=(
                 "Total number of occurrences, including the first occurrence. "
@@ -200,30 +206,58 @@ def create_calendar_event(
     ] = False,
 ) -> dict:
     """
-    Create a new Google Calendar event.
+    Create a new Google Calendar event, including one-time and recurring events.
 
-    Supports timed, all-day, multi-day, and recurring events.
+    WHEN TO USE:
+    - Use for meetings, reminders, workouts, tasks, appointments, and other scheduled activities.
+    - Use this tool once to create an entire recurring series. Never create recurring occurrences individually.
 
-    For recurring events:
-    - recurrence_frequency specifies the repetition frequency.
-    - recurrence_interval specifies the interval between occurrences.
-    - recurrence_count specifies the total number of occurrences,
-      including the first occurrence.
-    - recurrence_until specifies the inclusive final occurrence date.
-    - recurrence_indefinite=True permits an unlimited series,
-      only when explicitly requested by the user.
+    REQUIRED INPUTS:
+    - title: A meaningful event title.
+    - start: Start date and time of the first occurrence. Must be an unambiguous date/time.
+    - end: End date and time of the first occurrence. Omit when the default event duration is appropriate, if supported by the schema.
 
-    Exactly one recurrence termination condition must be supplied.
+    OPTIONAL INPUTS:
+    - description: Additional event information.
+    - location: Event location.
+    - all_day: Whether this is an all-day event.
+    - reminder_minutes: Reminder before the event.
+    - allow_conflict: Whether to permit creation when an occurrence overlaps an existing event.
 
-    The start and end parameters define the duration of ONE occurrence.
-    They must never be used to represent the entire recurrence period.
+    RECURRENCE PARAMETERS:
+    - recurrence_frequency: DAILY, WEEKLY, MONTHLY, or YEARLY.
+    - recurrence_interval: Repeat every N frequency units. For example, 1 means every day; 2 means every two days.
+    - recurrence_days: Weekdays for weekly recurrence, such as ["MO", "WE", "FR"].
+    - recurrence_count: Total number of occurrences, INCLUDING the first occurrence.
+    - recurrence_until: Final recurrence date. Mutually exclusive with recurrence_count.
+    - recurrence_indefinite: Create an ongoing series. Use only when explicitly requested.
 
-    If end is omitted, timed events default to one hour.
+    RECURRENCE EXAMPLES:
+    - "Every day for 21 days": frequency=DAILY, interval=1, count=21.
+    - "Every Monday and Wednesday for 10 occurrences": frequency=WEEKLY, days=["MO","WE"], count=10.
+    - "Every two weeks until December 31": frequency=WEEKLY, interval=2, until=<final date>.
 
-    Before creating timed events, calendar availability is checked.
+    EXECUTION RULES:
+    1. Resolve relative dates before calling this tool. Use Date-Time MCP only when the requested date/time requires clarification or calculation.
+    2. Validate start, end, timezone, and recurrence parameters.
+    3. For recurring events, validate availability across ALL generated occurrences, not just the first.
+    4. Perform recurrence-wide conflict checking internally. Do not require the agent to call availability separately for every occurrence.
+    5. If conflicts exist and allow_conflict is false, return the conflicting occurrence dates and do not create the event.
+    6. If allow_conflict is true, proceed with creation while reporting the conflicts.
+    7. Create the complete recurrence series using ONE Google Calendar insertion.
+    8. Return the event ID, title, start/end, recurrence details, timezone, and conflict information.
+
+    IMPORTANT:
+    - Never interpret "for 21 days" as an indefinite recurrence.
+    - Never make separate availability calls for each recurring date.
+    - Do not silently change the user's requested date, time, or recurrence pattern.
     """
 
     # Pydantic validation
+    # --------------------------------------------------
+    # 1. VALIDATE INPUT
+    # --------------------------------------------------
+
     payload = CreateEventSchema.model_validate(
         {
             "title": title,
@@ -243,17 +277,95 @@ def create_calendar_event(
         }
     )
 
-    # Resolve start
-    start_value = parse_date_or_datetime(payload.start, all_day=payload.all_day)
+    # --------------------------------------------------
+    # 2. PARSE EVENT START AND END
+    # --------------------------------------------------
 
-    # Resolve end
-    end_value = (
-        parse_date_or_datetime(payload.end, all_day=payload.all_day)
-        if payload.end
-        else None
+    start_value = parse_date_or_datetime(
+        payload.start,
+        all_day=payload.all_day,
     )
 
-    # Build recurrence
+    if payload.end:
+
+        end_value = parse_date_or_datetime(
+            payload.end,
+            all_day=payload.all_day,
+        )
+
+    elif payload.all_day:
+
+        # All-day event ends are exclusive.
+        end_value = start_value + timedelta(days=1)
+
+    else:
+
+        end_value = start_value + timedelta(hours=1)
+
+    # --------------------------------------------------
+    # 3. VALIDATE RECURRENCE START AND TERMINATION
+    # --------------------------------------------------
+
+    if payload.recurrence_frequency:
+
+        if payload.recurrence_days:
+
+            weekday_codes = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
+
+            event_date = (
+                start_value
+                if isinstance(start_value, date)
+                and not isinstance(start_value, datetime)
+                else start_value.date()
+            )
+
+            actual_weekday = weekday_codes[event_date.weekday()]
+
+            if actual_weekday not in payload.recurrence_days:
+
+                raise ValueError(
+                    f"The starting date falls on {actual_weekday}, "
+                    f"which is not included in recurrence_days. "
+                    f"Choose a matching start date or change the weekdays."
+                )
+
+        if payload.recurrence_until:
+
+            if payload.all_day:
+
+                until_value = date.fromisoformat(payload.recurrence_until)
+
+                if until_value < start_value:
+
+                    raise ValueError(
+                        "Recurrence end date cannot be before event start."
+                    )
+
+            else:
+
+                try:
+                    until_date = date.fromisoformat(payload.recurrence_until)
+
+                    until_datetime = datetime.combine(
+                        until_date,
+                        time.max,
+                        tzinfo=get_timezone(),
+                    )
+
+                except ValueError:
+
+                    until_datetime = parse_datetime(payload.recurrence_until)
+
+                if until_datetime < start_value:
+
+                    raise ValueError(
+                        "Recurrence end datetime cannot be before event start."
+                    )
+
+    # --------------------------------------------------
+    # 4. BUILD RECURRENCE RULE
+    # --------------------------------------------------
+
     recurrence = None
 
     if payload.recurrence_frequency:
@@ -264,30 +376,57 @@ def create_calendar_event(
             byday=payload.recurrence_days,
             count=payload.recurrence_count,
             until=payload.recurrence_until,
+            all_day=payload.all_day,
         )
 
-    # Check availability for timed events
-    if not payload.all_day:
+    # --------------------------------------------------
+    # 5. GENERATE OCCURRENCE WINDOWS
+    # --------------------------------------------------
 
-        if end_value is None:
-            end_value = start_value + timedelta(hours=1)
+    occurrences = generate_occurrence_windows(
+        start=start_value,
+        end=end_value,
+        recurrence=recurrence,
+        all_day=payload.all_day,
+        indefinite=payload.recurrence_indefinite,
+    )
 
-        availability = check_availability(
-            start_value,
-            end_value,
-        )
+    # --------------------------------------------------
+    # 6. CHECK ALL OCCURRENCES FOR CONFLICTS
+    # --------------------------------------------------
 
-        if not availability["available"] and not payload.allow_conflict:
-            return {
-                "success": False,
-                "conflict": True,
-                "message": (
-                    "This time slot is busy. " "Confirm whether you want to proceed."
-                ),
-                "busy_periods": availability["busy_periods"],
-            }
+    range_start = min(occurrence[0] for occurrence in occurrences)
 
-    # Create event
+    range_end = max(occurrence[1] for occurrence in occurrences)
+
+    availability = check_availability(
+        range_start,
+        range_end,
+    )
+
+    occurrence_conflicts = find_occurrence_conflicts(
+        occurrences,
+        availability["busy_periods"],
+    )
+
+    if occurrence_conflicts and not payload.allow_conflict:
+
+        return {
+            "success": False,
+            "conflict": True,
+            "message": (
+                "One or more event occurrences overlap "
+                "existing calendar commitments. "
+                "Confirm whether you want to proceed."
+            ),
+            "conflicting_occurrences": occurrence_conflicts,
+            "busy_periods": availability.get("busy_periods", []),
+        }
+
+    # --------------------------------------------------
+    # 7. CREATE EVENT
+    # --------------------------------------------------
+
     event = create_event(
         title=payload.title,
         start=start_value,
@@ -299,10 +438,30 @@ def create_calendar_event(
         reminder_minutes=payload.reminder_minutes,
     )
 
-    return {
+    result = {
         "success": True,
         "event": event,
     }
+
+    if payload.recurrence_indefinite:
+
+        result["availability_check"] = {
+            "complete": False,
+            "horizon_days": 90,
+            "message": (
+                "Conflicts were checked only within the next "
+                "90 days because this recurrence is indefinite."
+            ),
+        }
+
+    else:
+
+        result["availability_check"] = {
+            "complete": True,
+            "occurrences_checked": len(occurrences),
+        }
+
+    return result
 
 
 # ==================================================
@@ -384,6 +543,17 @@ def remove_calendar_event(
             description="Explicit user confirmation required before permanently deleting the selected event.",
         ),
     ] = False,
+    recurrence_scope: Annotated[
+        Literal["event", "series"] | None,
+        Field(
+            default=None,
+            description=(
+                "For recurring master events, use 'series' only when "
+                "the user explicitly confirms deletion of the entire series. "
+                "For an individual occurrence, use 'event'."
+            ),
+        ),
+    ] = None,
 ) -> dict:
     """
     Delete an existing Google Calendar event using its unique event ID.
@@ -393,24 +563,30 @@ def remove_calendar_event(
     Returns the deletion status and event identifier.
     """
 
-    payload = DeleteEventSchema.model_validate(
-        {
-            "event_id": event_id,
-            "confirmed": confirmed,
-        }
-    )
+    payload = DeleteEventSchema.model_validate({
+        "event_id": event_id,
+        "confirmed": confirmed,
+        "recurrence_scope": recurrence_scope,
+    })
 
+    # Confirmation must be checked before calling the service.
     if not payload.confirmed:
-        raise ValueError(
-            "Deletion requires explicit user confirmation. "
-            "Set confirmed=True after the user approves."
+        raise ConfirmationRequiredError(
+            "Event deletion requires explicit user confirmation."
+        )
+
+    # Preserve the ordinary deletion call signature.
+    if payload.recurrence_scope is None:
+        return delete_event(
+            payload.event_id,
+            payload.confirmed,
         )
 
     return delete_event(
         payload.event_id,
         payload.confirmed,
+        payload.recurrence_scope,
     )
-
 
 # ==================================================
 # 4. GET CALENDAR EVENT
@@ -513,7 +689,12 @@ def postpone_calendar_event(
         parsed_start = parse_datetime(payload.new_start)
         parsed_end = parse_datetime(payload.new_end)
 
-    return postpone_event(payload.event_id, parsed_start, parsed_end)
+    return postpone_event(
+        payload.event_id,
+        parsed_start,
+        parsed_end,
+        existing_event=existing,
+    )
 
 
 # ==================================================
@@ -839,4 +1020,4 @@ def get_calendar_list() -> list:
 # ==================================================
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport="stdio")
