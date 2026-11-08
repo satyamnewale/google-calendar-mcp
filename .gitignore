@@ -17,7 +17,7 @@ ENV/
 # ==============================
 # Test Files and Coverage
 # ==============================
-tests/
+
 .pytest_cache/
 .coverage
 .coverage.*

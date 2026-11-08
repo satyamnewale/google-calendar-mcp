@@ -117,39 +117,6 @@ wheels = [
 ]
 
 [[package]]
-name = "calender-mcp"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "fastmcp" },
-    { name = "google-api-python-client" },
-    { name = "google-auth-httplib2" },
-    { name = "google-auth-oauthlib" },
-    { name = "pydantic" },
-    { name = "python-dateutil" },
-    { name = "tzlocal" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastmcp", specifier = ">=4.1.6" },
-    { name = "google-api-python-client", specifier = ">=2.201.0" },
-    { name = "google-auth-httplib2", specifier = ">=0.4.4" },
-    { name = "google-auth-oauthlib", specifier = ">=1.5.0" },
-    { name = "pydantic", specifier = ">=2.14.2" },
-    { name = "python-dateutil", specifier = ">=3.0.0" },
-    { name = "tzlocal", specifier = ">=5.4.5" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.2.0" }]
-
-[[package]]
 name = "certifi"
 version = "2026.10.23"
 source = { registry = "https://pypi.org/simple" }
@@ -620,6 +587,39 @@ sdist = { url = "https://files.pythonhosted.org/packages/c4/40/1d7901e454831247e
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5a/bb/b5cc0757ad2f8068e7eb7180c37f82eb488627624c1b1214aa47ddbc032c/google_auth_oauthlib-1.5.0-py3-none-any.whl", hash = "sha256:71625fdea21c6c03217eb9ff13741c3096e6d257ebca0ad084dbd6e9f4aa4ef4", size = 20348, upload-time = "2026-09-29T19:25:31.842Z" },
 ]
+
+[[package]]
+name = "google-calendar-mcp"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "fastmcp" },
+    { name = "google-api-python-client" },
+    { name = "google-auth-httplib2" },
+    { name = "google-auth-oauthlib" },
+    { name = "pydantic" },
+    { name = "python-dateutil" },
+    { name = "tzlocal" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastmcp", specifier = ">=4.1.6" },
+    { name = "google-api-python-client", specifier = ">=2.201.0" },
+    { name = "google-auth-httplib2", specifier = ">=0.4.4" },
+    { name = "google-auth-oauthlib", specifier = ">=1.5.0" },
+    { name = "pydantic", specifier = ">=2.14.2" },
+    { name = "python-dateutil", specifier = ">=3.0.0" },
+    { name = "tzlocal", specifier = ">=5.4.5" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.2.0" }]
 
 [[package]]
 name = "googleapis-common-protos"

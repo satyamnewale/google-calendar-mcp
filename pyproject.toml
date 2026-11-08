@@ -1,5 +1,5 @@
 [project]
-name = "calender-mcp"
+name = "google-calendar-mcp"
 version = "0.1.0"
 description = "google Calendar MCP server"
 readme = "README.md"

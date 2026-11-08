@@ -25,6 +25,10 @@ from config.settings import (
     TIMEZONE,
 )
 
+from errors.exceptions import (
+    EventAlreadyCancelledError,
+    ConfirmationRequiredError
+)
 
 def create_event(
     title: str,
@@ -117,17 +121,16 @@ def update_event(event_id: str, updates: dict):
 
 def delete_event(event_id: str, confirmed: bool = False):
     if not confirmed:
-        raise ValueError(
-            "Deletion requires explicit user confirmation."
+        raise ConfirmationRequiredError(
+            "Event deletion was not performed because explicit confirmation is missing."
         )
 
     existing = get_event_by_id(event_id)
 
     if existing.get("status") == "cancelled":
-        return {
-            "success": False,
-            "message": "This event is already cancelled.",
-        }
+        raise EventAlreadyCancelledError(
+            "The selected event is cancelled and cannot be postponed."
+        )
 
     return delete_calendar_event(event_id)
 
