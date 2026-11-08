@@ -139,7 +139,7 @@ class CreateEventSchema(StrictSchema):
         int | None,
         Field(
             default=None,
-            ge=0,
+            gt=0,
             strict=True,
             description=(
                 "Number of times to repeat the event. " "Requires recurrence_frequency."

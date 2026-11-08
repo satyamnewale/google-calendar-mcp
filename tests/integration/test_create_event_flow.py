@@ -130,6 +130,7 @@ def test_create_recurring_event():
             start="2026-11-10T10:00:00+05:30",
             recurrence_frequency="DAILY",
             recurrence_interval=1,
+            recurrence_count=7,
         )
 
     assert result["success"] is True

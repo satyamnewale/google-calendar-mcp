@@ -90,5 +90,3 @@ def get_calendar_service():
 
     return service
 
-# run
-get_calendar_service()

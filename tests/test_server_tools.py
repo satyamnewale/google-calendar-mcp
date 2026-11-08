@@ -167,37 +167,56 @@ def test_create_calendar_event_allows_conflict_when_user_approves():
     mock_create.assert_called_once()
 
 
+@pytest.mark.unit
 def test_create_calendar_event_builds_recurrence_rule():
-    expected_event = {"id": "event_005", "summary": "Daily Standup"}
+
+    expected_event = {
+        "id": "event_005",
+        "summary": "Daily Standup",
+    }
 
     with (
-        patch("server.check_availability", return_value={
-            "available": True,
-            "busy_periods": [],
-        }),
-        patch("server.build_recurrence_rule", return_value=[
-            "RRULE:FREQ=DAILY;INTERVAL=1"
-        ]) as mock_rule,
-        patch("server.create_event", return_value=expected_event) as mock_create,
+        patch(
+            "server.check_availability",
+            return_value={
+                "available": True,
+                "busy_periods": [],
+            },
+        ),
+        patch(
+            "server.build_recurrence_rule",
+            return_value=[
+                "RRULE:FREQ=DAILY;INTERVAL=1;COUNT=7"
+            ],
+        ) as mock_rule,
+        patch(
+            "server.create_event",
+            return_value=expected_event,
+        ) as mock_create,
     ):
+
         result = server.create_calendar_event(
             title="Daily Standup",
             start=START,
             end=END,
             recurrence_frequency="DAILY",
             recurrence_interval=1,
+            recurrence_count=7,
         )
 
     assert result["success"] is True
+
     mock_rule.assert_called_once_with(
         frequency="DAILY",
         interval=1,
         byday=None,
+        count=7,
+        until=None,
     )
-    assert mock_create.call_args.kwargs["recurrence"] == [
-        "RRULE:FREQ=DAILY;INTERVAL=1"
-    ]
 
+    assert mock_create.call_args.kwargs["recurrence"] == [
+        "RRULE:FREQ=DAILY;INTERVAL=1;COUNT=7"
+    ]
 
 def test_create_calendar_event_rejects_invalid_recurrence_interval():
     with pytest.raises(Exception):
