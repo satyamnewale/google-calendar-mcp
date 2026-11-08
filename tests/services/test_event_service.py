@@ -8,11 +8,11 @@ from services import event_service
 
 TZ = ZoneInfo("Asia/Kolkata")
 
-
+@pytest.mark.services
 def timed(day=10, hour=10):
     return datetime(2026, 11, day, hour, 0, tzinfo=TZ)
 
-
+@pytest.mark.services
 def test_create_timed_event_builds_google_event_body(monkeypatch):
     captured = {}
     def insert(body):
@@ -29,7 +29,7 @@ def test_create_timed_event_builds_google_event_body(monkeypatch):
     assert body["end"]["dateTime"]
     assert body["start"]["timeZone"] == event_service.TIMEZONE
 
-
+@pytest.mark.services
 def test_create_all_day_event(monkeypatch):
     captured = {}
     monkeypatch.setattr(
@@ -50,7 +50,7 @@ def test_create_all_day_event(monkeypatch):
     assert captured["body"]["start"] == {"date": "2026-11-10"}
     assert captured["body"]["end"] == {"date": "2026-11-11"}
 
-
+@pytest.mark.services
 def test_create_timed_event_uses_default_duration(monkeypatch):
     captured = {}
     monkeypatch.setattr(
@@ -64,7 +64,7 @@ def test_create_timed_event_uses_default_duration(monkeypatch):
     end = datetime.fromisoformat(captured["body"]["end"]["dateTime"])
     assert end - start == timedelta(minutes=event_service.DEFAULT_EVENT_DURATION_MINUTES)
 
-
+@pytest.mark.services
 def test_create_event_includes_optional_description_and_location(monkeypatch):
     captured = {}
     def insert(body):
@@ -80,7 +80,7 @@ def test_create_event_includes_optional_description_and_location(monkeypatch):
     assert captured["body"]["description"] == "Discuss project"
     assert captured["body"]["location"] == "Office"
 
-
+@pytest.mark.services
 def test_create_event_sets_popup_reminder(monkeypatch):
     captured = {}
     monkeypatch.setattr(
@@ -95,7 +95,7 @@ def test_create_event_sets_popup_reminder(monkeypatch):
         "overrides": [{"method": "popup", "minutes": 15}],
     }
 
-
+@pytest.mark.services
 def test_create_event_includes_valid_recurrence(monkeypatch):
     captured = {}
     def insert(body):
@@ -108,27 +108,27 @@ def test_create_event_includes_valid_recurrence(monkeypatch):
 
     assert captured["body"]["recurrence"] == rule
 
-
+@pytest.mark.services
 def test_create_event_rejects_blank_title():
     with pytest.raises(ValueError):
         event_service.create_event("", timed(), timed(hour=11))
 
-
+@pytest.mark.services
 def test_create_event_rejects_invalid_time_range():
     with pytest.raises(ValueError):
         event_service.create_event("Meeting", timed(hour=12), timed(hour=11))
 
-
+@pytest.mark.services
 def test_create_event_rejects_invalid_reminder():
     with pytest.raises(ValueError):
         event_service.create_event("Meeting", timed(), timed(hour=11), reminder_minutes=-1)
 
-
+@pytest.mark.services
 def test_create_event_rejects_non_datetime_for_timed_event():
     with pytest.raises(ValueError):
         event_service.create_event("Meeting", date(2026, 11, 10), date(2026, 11, 11))
 
-
+@pytest.mark.services
 def test_update_event_delegates_to_calendar_service(monkeypatch):
     captured = {}
     def update(event_id, updates):
@@ -145,17 +145,17 @@ def test_update_event_delegates_to_calendar_service(monkeypatch):
         "updates": {"summary": "Updated Meeting"},
     }
 
-
+@pytest.mark.services
 def test_update_event_rejects_unsupported_field():
     with pytest.raises(ValueError):
         event_service.update_event("event_001", {"invalid_field": "value"})
 
-
+@pytest.mark.services
 def test_delete_event_requires_confirmation():
     with pytest.raises(ConfirmationRequiredError):
         event_service.delete_event("event_001", confirmed=False)
 
-
+@pytest.mark.services
 def test_delete_event_deletes_confirmed_active_event(monkeypatch):
     monkeypatch.setattr(
         event_service, "get_event_by_id",
@@ -172,7 +172,7 @@ def test_delete_event_deletes_confirmed_active_event(monkeypatch):
     assert deleted["id"] == "event_001"
     assert result["success"] is True
 
-
+@pytest.mark.services
 def test_delete_event_rejects_already_cancelled_event(monkeypatch):
     monkeypatch.setattr(
         event_service, "get_event_by_id",
@@ -185,14 +185,14 @@ def test_delete_event_rejects_already_cancelled_event(monkeypatch):
     with pytest.raises(EventAlreadyCancelledError):
         event_service.delete_event("event_001", confirmed=True)
 
-
+@pytest.mark.services
 def test_get_event_details_returns_event(monkeypatch):
     expected = {"id": "event_001", "summary": "Team Meeting"}
     monkeypatch.setattr(event_service, "get_event_by_id", lambda event_id: expected)
 
     assert event_service.get_event_details("event_001") == expected
 
-
+@pytest.mark.services
 def test_postpone_timed_event_updates_only_schedule_and_reuses_existing_event(monkeypatch):
     existing = {
         "id": "event_001",
@@ -215,7 +215,7 @@ def test_postpone_timed_event_updates_only_schedule_and_reuses_existing_event(mo
     assert captured["updates"]["end"]["dateTime"]
     assert captured["kwargs"]["existing_event"] is existing
 
-
+@pytest.mark.services
 def test_postpone_all_day_event(monkeypatch):
     existing = {
         "id": "event_002",
@@ -239,7 +239,7 @@ def test_postpone_all_day_event(monkeypatch):
         "end": {"date": "2026-11-13"},
     }
 
-
+@pytest.mark.services
 def test_postpone_rejects_cancelled_event(monkeypatch):
     monkeypatch.setattr(
         event_service, "get_event_by_id",

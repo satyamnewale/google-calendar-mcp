@@ -1,9 +1,9 @@
 
 from unittest.mock import patch
-
+import pytest
 import server
 
-
+@pytest.mark.integration
 def test_available_slot_then_create_event():
     with (
         patch(
@@ -33,7 +33,7 @@ def test_available_slot_then_create_event():
     mock_availability.assert_called_once()
     mock_create.assert_called_once()
 
-
+@pytest.mark.integration
 def test_busy_slot_prevents_event_creation():
     busy_periods = [
         {
@@ -62,7 +62,7 @@ def test_busy_slot_prevents_event_creation():
     assert result["conflict"] is True
     mock_create.assert_not_called()
 
-
+@pytest.mark.integration
 def test_check_calendar_availability():
     with patch(
         "server.check_availability",
@@ -80,7 +80,7 @@ def test_check_calendar_availability():
     assert result["available"] is True
     mock_availability.assert_called_once()
 
-
+@pytest.mark.integration
 def test_check_calendar_availability_with_conflict():
     busy_periods = [
         {
@@ -104,7 +104,7 @@ def test_check_calendar_availability_with_conflict():
     assert result["available"] is False
     assert result["busy_periods"] == busy_periods
 
-
+@pytest.mark.integration
 def test_suggest_available_slots():
     expected_slots = [
         {
@@ -134,7 +134,7 @@ def test_suggest_available_slots():
 
     assert args[2] == 60
 
-
+@pytest.mark.integration
 def test_suggest_available_slots_with_custom_duration():
     with patch(
         "server.get_available_slots",

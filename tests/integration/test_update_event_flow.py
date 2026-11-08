@@ -6,7 +6,7 @@ from fastmcp.exceptions import ToolError
 
 import server
 
-
+@pytest.mark.integration
 def test_update_event_title():
     with patch(
         "server.update_event",
@@ -29,7 +29,7 @@ def test_update_event_title():
         {"summary": "Updated Meeting"},
     )
 
-
+@pytest.mark.integration
 def test_update_event_description_and_location():
     updates = {
         "description": "Updated agenda",
@@ -49,7 +49,7 @@ def test_update_event_description_and_location():
     assert result["id"] == "event_001"
     mock_update.assert_called_once_with("event_001", updates)
 
-
+@pytest.mark.integration
 def test_update_event_schedule():
     updates = {
         "start": {
@@ -73,7 +73,7 @@ def test_update_event_schedule():
     assert result["id"] == "event_001"
     mock_update.assert_called_once()
 
-
+@pytest.mark.integration
 def test_update_event_invalid_id():
     with (
         patch("server.update_event") as mock_update,
@@ -86,7 +86,7 @@ def test_update_event_invalid_id():
 
     mock_update.assert_not_called()
 
-
+@pytest.mark.integration
 def test_update_event_empty_updates():
     with (
         patch("server.update_event") as mock_update,

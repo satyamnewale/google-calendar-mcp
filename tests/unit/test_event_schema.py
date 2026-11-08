@@ -19,7 +19,7 @@ from schemas.event_schema import (
 # --------------------------------------------------
 # CREATE EVENT SCHEMA
 # --------------------------------------------------
-
+@pytest.mark.unit
 def test_valid_create_event():
     payload = {
         "title": "Team Meeting",
@@ -31,7 +31,7 @@ def test_valid_create_event():
 
     assert result.title == "Team Meeting"
 
-
+@pytest.mark.unit
 def test_create_event_missing_title():
     payload = {
         "start": "2026-11-10T10:00:00+05:30",
@@ -40,7 +40,7 @@ def test_create_event_missing_title():
     with pytest.raises(ValidationError):
         CreateEventSchema.model_validate(payload)
 
-
+@pytest.mark.unit
 def test_create_event_empty_title():
     payload = {
         "title": "",
@@ -50,7 +50,7 @@ def test_create_event_empty_title():
     with pytest.raises(ValidationError):
         CreateEventSchema.model_validate(payload)
 
-
+@pytest.mark.unit
 def test_create_event_invalid_recurrence_frequency():
     payload = {
         "title": "Meeting",
@@ -61,7 +61,7 @@ def test_create_event_invalid_recurrence_frequency():
     with pytest.raises(ValidationError):
         CreateEventSchema.model_validate(payload)
 
-
+@pytest.mark.unit
 def test_create_event_invalid_recurrence_interval():
     payload = {
         "title": "Meeting",
@@ -73,7 +73,7 @@ def test_create_event_invalid_recurrence_interval():
     with pytest.raises(ValidationError):
         CreateEventSchema.model_validate(payload)
 
-
+@pytest.mark.unit
 def test_create_event_invalid_reminder():
     payload = {
         "title": "Meeting",
@@ -84,7 +84,7 @@ def test_create_event_invalid_reminder():
     with pytest.raises(ValidationError):
         CreateEventSchema.model_validate(payload)
 
-
+@pytest.mark.unit
 def test_create_event_recurrence_days():
     payload = {
         "title": "Meeting",
@@ -101,7 +101,7 @@ def test_create_event_recurrence_days():
 # --------------------------------------------------
 # UPDATE EVENT SCHEMA
 # --------------------------------------------------
-
+@pytest.mark.unit
 def test_valid_update_event():
     payload = {
         "event_id": "event_001",
@@ -114,7 +114,7 @@ def test_valid_update_event():
 
     assert result.event_id == "event_001"
 
-
+@pytest.mark.unit
 def test_update_event_missing_id():
     payload = {
         "updates": {
@@ -125,7 +125,7 @@ def test_update_event_missing_id():
     with pytest.raises(ValidationError):
         UpdateEventSchema.model_validate(payload)
 
-
+@pytest.mark.unit
 def test_update_event_empty_updates():
     payload = {
         "event_id": "event_001",
@@ -139,7 +139,7 @@ def test_update_event_empty_updates():
 # --------------------------------------------------
 # DELETE EVENT SCHEMA
 # --------------------------------------------------
-
+@pytest.mark.unit
 def test_valid_delete_event():
     payload = {
         "event_id": "event_001",
@@ -150,7 +150,7 @@ def test_valid_delete_event():
 
     assert result.confirmed is True
 
-
+@pytest.mark.unit
 def test_delete_event_missing_id():
     payload = {
         "confirmed": True,
@@ -163,7 +163,7 @@ def test_delete_event_missing_id():
 # --------------------------------------------------
 # GET EVENT SCHEMA
 # --------------------------------------------------
-
+@pytest.mark.unit
 def test_valid_get_event():
     payload = {
         "event_id": "event_001",
@@ -173,7 +173,7 @@ def test_valid_get_event():
 
     assert result.event_id == "event_001"
 
-
+@pytest.mark.unit
 def test_get_event_empty_id():
     payload = {
         "event_id": "",
@@ -186,7 +186,7 @@ def test_get_event_empty_id():
 # --------------------------------------------------
 # POSTPONE EVENT SCHEMA
 # --------------------------------------------------
-
+@pytest.mark.unit
 def test_valid_postpone_event():
     payload = {
         "event_id": "event_001",
@@ -198,7 +198,7 @@ def test_valid_postpone_event():
 
     assert result.event_id == "event_001"
 
-
+@pytest.mark.unit
 def test_postpone_event_missing_new_end():
     payload = {
         "event_id": "event_001",
@@ -212,7 +212,7 @@ def test_postpone_event_missing_new_end():
 # --------------------------------------------------
 # SEARCH EVENTS SCHEMA
 # --------------------------------------------------
-
+@pytest.mark.unit
 def test_valid_search_events():
     payload = {
         "start": "2026-11-10T00:00:00+05:30",
@@ -224,7 +224,7 @@ def test_valid_search_events():
 
     assert result.title == "Meeting"
 
-
+@pytest.mark.unit
 def test_search_events_missing_start():
     payload = {
         "end": "2026-11-11T00:00:00+05:30",
@@ -237,7 +237,7 @@ def test_search_events_missing_start():
 # --------------------------------------------------
 # SIMILAR EVENTS SCHEMA
 # --------------------------------------------------
-
+@pytest.mark.unit
 def test_valid_similar_events():
     payload = {
         "title": "Team Meeting",
@@ -249,7 +249,7 @@ def test_valid_similar_events():
 
     assert result.title == "Team Meeting"
 
-
+@pytest.mark.unit
 def test_similar_events_empty_title():
     payload = {
         "title": "",
@@ -264,7 +264,7 @@ def test_similar_events_empty_title():
 # --------------------------------------------------
 # CALENDAR OVERVIEW SCHEMA
 # --------------------------------------------------
-
+@pytest.mark.unit
 def test_valid_calendar_overview():
     payload = {
         "period": "week",
@@ -275,7 +275,7 @@ def test_valid_calendar_overview():
 
     assert result.period == "week"
 
-
+@pytest.mark.unit
 def test_invalid_calendar_overview_period():
     payload = {
         "period": "year",
@@ -288,7 +288,7 @@ def test_invalid_calendar_overview_period():
 # --------------------------------------------------
 # AVAILABILITY SCHEMA
 # --------------------------------------------------
-
+@pytest.mark.unit
 def test_valid_availability():
     payload = {
         "start": "2026-11-10T10:00:00+05:30",
@@ -303,7 +303,7 @@ def test_valid_availability():
 # --------------------------------------------------
 # AVAILABLE SLOTS SCHEMA
 # --------------------------------------------------
-
+@pytest.mark.unit
 def test_valid_available_slots():
     payload = {
         "start": "2026-11-10T09:00:00+05:30",
@@ -315,7 +315,7 @@ def test_valid_available_slots():
 
     assert result.duration_minutes == 60
 
-
+@pytest.mark.unit
 def test_available_slots_duration_above_limit():
     payload = {
         "start": "2026-11-10T09:00:00+05:30",
@@ -326,7 +326,7 @@ def test_available_slots_duration_above_limit():
     with pytest.raises(ValidationError):
         AvailableSlotsSchema.model_validate(payload)
 
-
+@pytest.mark.unit
 def test_available_slots_zero_duration():
     payload = {
         "start": "2026-11-10T09:00:00+05:30",

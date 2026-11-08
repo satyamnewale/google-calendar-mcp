@@ -25,7 +25,7 @@ def sample_events():
         },
     ]
 
-
+@pytest.mark.services
 def test_count_events_in_range_excludes_cancelled(monkeypatch):
     events = [
         {"id": "a", "status": "confirmed"},
@@ -41,7 +41,7 @@ def test_count_events_in_range_excludes_cancelled(monkeypatch):
 
     assert count == 2
 
-
+@pytest.mark.services
 def test_daily_schedule_returns_date_count_and_events(monkeypatch, sample_events):
     monkeypatch.setattr(calendar_summary, "get_event_for_day", lambda day: sample_events)
 
@@ -53,7 +53,7 @@ def test_daily_schedule_returns_date_count_and_events(monkeypatch, sample_events
         "events": sample_events,
     }
 
-
+@pytest.mark.services
 def test_daily_schedule_returns_empty_schedule(monkeypatch):
     monkeypatch.setattr(calendar_summary, "get_event_for_day", lambda day: [])
 
@@ -61,7 +61,7 @@ def test_daily_schedule_returns_empty_schedule(monkeypatch):
 
     assert result == {"date": "2026-11-10", "total_events": 0, "events": []}
 
-
+@pytest.mark.services
 def test_weekly_schedule_groups_events_by_date(monkeypatch):
     events = [
         {"id": "a", "start": {"dateTime": "2026-11-10T10:00:00+05:30"}},
@@ -76,13 +76,13 @@ def test_weekly_schedule_groups_events_by_date(monkeypatch):
     assert [event["id"] for event in result["days"]["2026-11-10"]] == ["a", "b"]
     assert [event["id"] for event in result["days"]["2026-11-11"]] == ["c"]
 
-
+@pytest.mark.services
 def test_weekly_schedule_empty(monkeypatch):
     monkeypatch.setattr(calendar_summary, "get_event_for_week", lambda week: [])
 
     assert calendar_summary.get_weekly_schedule() == {"total_events": 0, "days": {}}
 
-
+@pytest.mark.services
 def test_monthly_overview_counts_events_per_day(monkeypatch):
     events = [
         {"id": "a", "start": {"dateTime": "2026-11-10T10:00:00+05:30"}},
@@ -98,7 +98,7 @@ def test_monthly_overview_counts_events_per_day(monkeypatch):
         "daily_counts": {"2026-11-10": 2, "2026-11-12": 1},
     }
 
-
+@pytest.mark.services
 def test_monthly_overview_empty(monkeypatch):
     monkeypatch.setattr(calendar_summary, "get_event_for_month", lambda month: [])
 
@@ -107,35 +107,35 @@ def test_monthly_overview_empty(monkeypatch):
         "daily_counts": {},
     }
 
-
+@pytest.mark.services
 def test_get_calendar_summary_daily(monkeypatch):
     expected = {"date": "2026-11-10", "total_events": 0, "events": []}
     monkeypatch.setattr(calendar_summary, "get_daily_schedule", lambda day: expected)
 
     assert calendar_summary.get_calendar_summary("day", "2026-11-10") == expected
 
-
+@pytest.mark.services
 def test_get_calendar_summary_weekly(monkeypatch):
     expected = {"total_events": 0, "days": {}}
     monkeypatch.setattr(calendar_summary, "get_weekly_schedule", lambda week: expected)
 
     assert calendar_summary.get_calendar_summary("week", "2026-11-10") == expected
 
-
+@pytest.mark.services
 def test_get_calendar_summary_monthly(monkeypatch):
     expected = {"total_events": 0, "daily_counts": {}}
     monkeypatch.setattr(calendar_summary, "get_monthly_overview", lambda month: expected)
 
     assert calendar_summary.get_calendar_summary("month", "2026-11") == expected
 
-
+@pytest.mark.services
 def test_get_calendar_summary_normalizes_period_case(monkeypatch):
     expected = {"date": "today", "total_events": 0, "events": []}
     monkeypatch.setattr(calendar_summary, "get_daily_schedule", lambda day: expected)
 
     assert calendar_summary.get_calendar_summary("DAY") == expected
 
-
+@pytest.mark.services
 def test_get_calendar_summary_rejects_unsupported_period():
     with pytest.raises(ValueError, match="Period must be day, week, or month"):
         calendar_summary.get_calendar_summary("year", "2026")

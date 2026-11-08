@@ -5,7 +5,7 @@ from fastmcp.exceptions import ToolError
 
 from errors.error_handler import handle_tool_errors
 
-
+@pytest.mark.unit
 def test_successful_function_returns_result():
 
     @handle_tool_errors
@@ -16,7 +16,7 @@ def test_successful_function_returns_result():
 
     assert result == {"success": True}
 
-
+@pytest.mark.unit
 def test_value_error_is_converted_to_tool_error():
 
     @handle_tool_errors
@@ -26,7 +26,7 @@ def test_value_error_is_converted_to_tool_error():
     with pytest.raises(ToolError):
         sample_tool()
 
-
+@pytest.mark.unit
 def test_unexpected_error_is_converted_to_tool_error():
 
     @handle_tool_errors
@@ -36,7 +36,7 @@ def test_unexpected_error_is_converted_to_tool_error():
     with pytest.raises(ToolError):
         sample_tool()
 
-
+@pytest.mark.unit
 def test_function_arguments_are_preserved():
 
     @handle_tool_errors
@@ -51,7 +51,7 @@ def test_function_arguments_are_preserved():
     assert result["title"] == "Team Meeting"
     assert result["reminder_minutes"] == 15
 
-
+@pytest.mark.unit
 def test_function_return_list():
 
     @handle_tool_errors

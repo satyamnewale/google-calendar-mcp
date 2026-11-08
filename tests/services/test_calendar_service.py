@@ -7,15 +7,15 @@ from services import calendar_service
 
 TZ = ZoneInfo("Asia/Kolkata")
 
-
+@pytest.mark.services
 def dt(day, hour=0):
     return datetime(2026, 11, day, hour, 0, tzinfo=TZ)
 
-
+@pytest.mark.services
 def use_mock_service(monkeypatch, service):
     monkeypatch.setattr(calendar_service, "get_calendar_service", lambda: service)
 
-
+@pytest.mark.services
 def test_get_event_by_id(mock_calendar_service, monkeypatch):
     use_mock_service(monkeypatch, mock_calendar_service)
     expected = {"id": "event_001", "summary": "Team Meeting"}
@@ -29,7 +29,7 @@ def test_get_event_by_id(mock_calendar_service, monkeypatch):
         eventId="event_001",
     )
 
-
+@pytest.mark.services
 def test_list_events_in_range(mock_calendar_service, monkeypatch):
     use_mock_service(monkeypatch, mock_calendar_service)
     expected = [{"id": "event_001"}, {"id": "event_002"}]
@@ -46,14 +46,14 @@ def test_list_events_in_range(mock_calendar_service, monkeypatch):
     assert kwargs["singleEvents"] is True
     assert kwargs["orderBy"] == "startTime"
 
-
+@pytest.mark.services
 def test_list_events_rejects_invalid_range(mock_calendar_service, monkeypatch):
     use_mock_service(monkeypatch, mock_calendar_service)
 
     with pytest.raises(ValueError, match="End date must be after start date"):
         calendar_service.list_events_in_range(dt(11), dt(10))
 
-
+@pytest.mark.services
 def test_list_events_requires_timezone_aware_datetimes(mock_calendar_service, monkeypatch):
     use_mock_service(monkeypatch, mock_calendar_service)
 
@@ -62,14 +62,14 @@ def test_list_events_requires_timezone_aware_datetimes(mock_calendar_service, mo
             datetime(2026, 11, 10), datetime(2026, 11, 11)
         )
 
-
+@pytest.mark.services
 def test_list_events_rejects_invalid_max_results(mock_calendar_service, monkeypatch):
     use_mock_service(monkeypatch, mock_calendar_service)
 
     with pytest.raises(ValueError, match="max_results"):
         calendar_service.list_events_in_range(dt(10), dt(11), max_results=0)
 
-
+@pytest.mark.services
 def test_list_events_handles_pagination(mock_calendar_service, monkeypatch):
     use_mock_service(monkeypatch, mock_calendar_service)
     execute = mock_calendar_service.events.return_value.list.return_value.execute
@@ -84,7 +84,7 @@ def test_list_events_handles_pagination(mock_calendar_service, monkeypatch):
     assert execute.call_count == 2
     assert mock_calendar_service.events.return_value.list.call_args.kwargs["pageToken"] == "page_2"
 
-
+@pytest.mark.services
 def test_list_events_stops_at_max_results(mock_calendar_service, monkeypatch):
     use_mock_service(monkeypatch, mock_calendar_service)
     execute = mock_calendar_service.events.return_value.list.return_value.execute
@@ -98,7 +98,7 @@ def test_list_events_stops_at_max_results(mock_calendar_service, monkeypatch):
     assert len(result) == 2
     assert execute.call_count == 1
 
-
+@pytest.mark.services
 def test_insert_calendar_event(mock_calendar_service, monkeypatch):
     use_mock_service(monkeypatch, mock_calendar_service)
     expected = {"id": "new_event", "summary": "New Meeting"}
@@ -113,7 +113,7 @@ def test_insert_calendar_event(mock_calendar_service, monkeypatch):
         body=body,
     )
 
-
+@pytest.mark.services
 def test_update_calendar_event_gets_then_updates_full_resource(mock_calendar_service, monkeypatch):
     use_mock_service(monkeypatch, mock_calendar_service)
     events = mock_calendar_service.events.return_value
@@ -142,7 +142,7 @@ def test_update_calendar_event_gets_then_updates_full_resource(mock_calendar_ser
     assert body["description"] == "Keep this description"
     events.patch.assert_not_called()
 
-
+@pytest.mark.services
 def test_update_calendar_event_uses_supplied_existing_event(mock_calendar_service, monkeypatch):
     use_mock_service(monkeypatch, mock_calendar_service)
     events = mock_calendar_service.events.return_value
@@ -156,7 +156,7 @@ def test_update_calendar_event_uses_supplied_existing_event(mock_calendar_servic
     events.get.assert_not_called()
     events.update.assert_called_once()
 
-
+@pytest.mark.services
 def test_delete_calendar_event(mock_calendar_service, monkeypatch):
     use_mock_service(monkeypatch, mock_calendar_service)
 
@@ -172,7 +172,7 @@ def test_delete_calendar_event(mock_calendar_service, monkeypatch):
         eventId="event_001",
     )
 
-
+@pytest.mark.services
 def test_list_calendars(mock_calendar_service, monkeypatch):
     use_mock_service(monkeypatch, mock_calendar_service)
     expected = [{"id": "primary", "summary": "My Calendar"}]
@@ -182,7 +182,7 @@ def test_list_calendars(mock_calendar_service, monkeypatch):
 
     assert calendar_service.list_calendars() == expected
 
-
+@pytest.mark.services
 def test_list_calendars_returns_empty_list_when_no_items(mock_calendar_service, monkeypatch):
     use_mock_service(monkeypatch, mock_calendar_service)
     mock_calendar_service.calendarList.return_value.list.return_value.execute.return_value = {}

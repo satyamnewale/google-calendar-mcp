@@ -11,7 +11,7 @@ import server
 
 TZ = ZoneInfo("Asia/Kolkata")
 
-
+@pytest.mark.integration
 def test_postpone_timed_event():
     existing_event = {
         "id": "event_001",
@@ -51,7 +51,7 @@ def test_postpone_timed_event():
     assert args[1].tzinfo is not None
     assert args[2].tzinfo is not None
 
-
+@pytest.mark.integration
 def test_postpone_all_day_event():
     existing_event = {
         "id": "event_002",
@@ -89,7 +89,7 @@ def test_postpone_all_day_event():
     assert isinstance(args[2], date)
     assert not isinstance(args[1], datetime)
 
-
+@pytest.mark.integration
 def test_postpone_event_invalid_id():
     with (
         patch("server.get_event_details") as mock_get,
@@ -103,7 +103,7 @@ def test_postpone_event_invalid_id():
 
     mock_get.assert_not_called()
 
-
+@pytest.mark.integration
 def test_postpone_event_missing_end():
     with (
         patch("server.get_event_details") as mock_get,
@@ -117,7 +117,7 @@ def test_postpone_event_missing_end():
 
     mock_get.assert_not_called()
 
-
+@pytest.mark.integration
 def test_postpone_event_invalid_datetime():
     existing_event = {
         "id": "event_001",

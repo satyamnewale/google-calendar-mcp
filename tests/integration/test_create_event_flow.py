@@ -1,5 +1,5 @@
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 from unittest.mock import patch
 
@@ -16,6 +16,7 @@ TZ = ZoneInfo("Asia/Kolkata")
 # 1. CREATE TIMED EVENT
 # --------------------------------------------------
 
+@pytest.mark.integration
 def test_create_timed_event():
     with (
         patch(
@@ -49,7 +50,7 @@ def test_create_timed_event():
 # --------------------------------------------------
 # 2. CREATE ALL-DAY EVENT
 # --------------------------------------------------
-
+@pytest.mark.integration
 def test_create_all_day_event():
     with patch(
         "server.create_event",
@@ -79,7 +80,7 @@ def test_create_all_day_event():
 # --------------------------------------------------
 # 3. DEFAULT ONE-HOUR DURATION
 # --------------------------------------------------
-
+@pytest.mark.integration
 def test_create_timed_event_without_end_uses_one_hour():
     with (
         patch(
@@ -109,7 +110,7 @@ def test_create_timed_event_without_end_uses_one_hour():
 # --------------------------------------------------
 # 4. CREATE RECURRING EVENT
 # --------------------------------------------------
-
+@pytest.mark.integration
 def test_create_recurring_event():
     with (
         patch(
@@ -142,7 +143,7 @@ def test_create_recurring_event():
 # --------------------------------------------------
 # 5. CONFLICT WITHOUT USER APPROVAL
 # --------------------------------------------------
-
+@pytest.mark.integration
 def test_create_event_with_conflict_without_permission():
     busy_periods = [
         {
@@ -177,7 +178,7 @@ def test_create_event_with_conflict_without_permission():
 # --------------------------------------------------
 # 6. CONFLICT WITH USER APPROVAL
 # --------------------------------------------------
-
+@pytest.mark.integration
 def test_create_event_with_conflict_and_permission():
     with (
         patch(
@@ -213,7 +214,7 @@ def test_create_event_with_conflict_and_permission():
 # --------------------------------------------------
 # 7. INVALID EVENT TITLE
 # --------------------------------------------------
-
+@pytest.mark.integration
 def test_create_event_invalid_title():
     with (
         patch("server.create_event") as mock_create,

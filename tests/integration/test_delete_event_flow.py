@@ -6,7 +6,7 @@ from fastmcp.exceptions import ToolError
 
 import server
 
-
+@pytest.mark.integration
 def test_delete_event_with_confirmation():
     with patch(
         "server.delete_event",
@@ -28,7 +28,7 @@ def test_delete_event_with_confirmation():
         True,
     )
 
-
+@pytest.mark.integration
 def test_delete_event_without_confirmation():
     with (
         patch("server.delete_event") as mock_delete,
@@ -42,7 +42,7 @@ def test_delete_event_without_confirmation():
     # Deletion must never reach the service.
     mock_delete.assert_not_called()
 
-
+@pytest.mark.integration
 def test_delete_event_invalid_id():
     with (
         patch("server.delete_event") as mock_delete,
@@ -55,7 +55,7 @@ def test_delete_event_invalid_id():
 
     mock_delete.assert_not_called()
 
-
+@pytest.mark.integration
 def test_delete_already_cancelled_event():
     with patch(
         "server.delete_event",
