@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -7,6 +7,110 @@ from services import calendar_summary
 
 TZ = ZoneInfo("Asia/Kolkata")
 
+
+@pytest.mark.services
+def test_multiday_all_day_event_appears_on_each_day(monkeypatch):
+
+    event = {
+        "id": "event_001",
+        "summary": "Project Workshop",
+        "start": {
+            "date": "2026-11-09",
+        },
+        "end": {
+            "date": "2026-11-12",
+        },
+    }
+
+    monkeypatch.setattr(
+        calendar_summary,
+        "get_week_range",
+        lambda _: (
+            datetime(2026, 11, 9, tzinfo=TZ),
+            datetime(2026, 11, 16, tzinfo=TZ),
+        ),
+    )
+
+    monkeypatch.setattr(
+        calendar_summary,
+        "get_event_for_week",
+        lambda _: [event],
+    )
+
+    result = calendar_summary.get_weekly_schedule(
+        "2026-11-09"
+    )
+
+    assert result["total_events"] == 1
+
+    assert "2026-11-09" in result["days"]
+    assert "2026-11-10" in result["days"]
+    assert "2026-11-11" in result["days"]
+
+    assert "2026-11-12" not in result["days"]
+
+
+@pytest.mark.services
+def test_multiday_timed_event_appears_on_each_occupied_day(monkeypatch):
+
+    event = {
+        "id": "event_002",
+        "summary": "Conference",
+        "start": {
+            "dateTime": "2026-11-09T09:00:00+05:30",
+        },
+        "end": {
+            "dateTime": "2026-11-11T17:00:00+05:30",
+        },
+    }
+
+    monkeypatch.setattr(
+        calendar_summary,
+        "get_week_range",
+        lambda _: (
+            datetime(2026, 11, 9, tzinfo=TZ),
+            datetime(2026, 11, 16, tzinfo=TZ),
+        ),
+    )
+
+    monkeypatch.setattr(
+        calendar_summary,
+        "get_event_for_week",
+        lambda _: [event],
+    )
+
+    result = calendar_summary.get_weekly_schedule(
+        "2026-11-09"
+    )
+
+    assert result["total_events"] == 1
+
+    assert len(result["days"]["2026-11-09"]) == 1
+    assert len(result["days"]["2026-11-10"]) == 1
+    assert len(result["days"]["2026-11-11"]) == 1
+
+
+@pytest.mark.services
+def test_event_ending_at_midnight_does_not_occupy_next_day():
+
+    event = {
+        "start": {
+            "dateTime": "2026-11-09T22:00:00+05:30",
+        },
+        "end": {
+            "dateTime": "2026-11-10T00:00:00+05:30",
+        },
+    }
+
+    dates = calendar_summary._get_event_dates(
+        event,
+        date(2026, 11, 9),
+        date(2026, 11, 12),
+    )
+
+    assert dates == [
+        date(2026, 11, 9)
+    ]
 
 @pytest.fixture
 def sample_events():
@@ -64,10 +168,30 @@ def test_daily_schedule_returns_empty_schedule(monkeypatch):
 @pytest.mark.services
 def test_weekly_schedule_groups_events_by_date(monkeypatch):
     events = [
-        {"id": "a", "start": {"dateTime": "2026-11-10T10:00:00+05:30"}},
-        {"id": "b", "start": {"date": "2026-11-10"}},
-        {"id": "c", "start": {"dateTime": "2026-11-11T09:00:00+05:30"}},
-    ]
+    {
+        "id": "a",
+        "start": {
+            "dateTime": "2026-11-10T10:00:00+05:30"
+        },
+        "end": {
+            "dateTime": "2026-11-10T11:00:00+05:30"
+        },
+    },
+    {
+        "id": "b",
+        "start": {"date": "2026-11-10"},
+        "end": {"date": "2026-11-11"},
+    },
+    {
+        "id": "c",
+        "start": {
+            "dateTime": "2026-11-11T09:00:00+05:30"
+        },
+        "end": {
+            "dateTime": "2026-11-11T10:00:00+05:30"
+        },
+    },
+]
     monkeypatch.setattr(calendar_summary, "get_event_for_week", lambda week: events)
 
     result = calendar_summary.get_weekly_schedule("2026-11-10")
@@ -85,10 +209,30 @@ def test_weekly_schedule_empty(monkeypatch):
 @pytest.mark.services
 def test_monthly_overview_counts_events_per_day(monkeypatch):
     events = [
-        {"id": "a", "start": {"dateTime": "2026-11-10T10:00:00+05:30"}},
-        {"id": "b", "start": {"date": "2026-11-10"}},
-        {"id": "c", "start": {"dateTime": "2026-11-12T09:00:00+05:30"}},
-    ]
+    {
+        "id": "a",
+        "start": {
+            "dateTime": "2026-11-10T10:00:00+05:30"
+        },
+        "end": {
+            "dateTime": "2026-11-10T11:00:00+05:30"
+        },
+    },
+    {
+        "id": "b",
+        "start": {"date": "2026-11-10"},
+        "end": {"date": "2026-11-11"},
+    },
+    {
+    "id": "c",
+        "start": {
+            "dateTime": "2026-11-12T09:00:00+05:30"
+        },
+        "end": {
+            "dateTime": "2026-11-12T10:00:00+05:30"
+        },
+    }
+]
     monkeypatch.setattr(calendar_summary, "get_event_for_month", lambda month: events)
 
     result = calendar_summary.get_monthly_overview("2026-11")

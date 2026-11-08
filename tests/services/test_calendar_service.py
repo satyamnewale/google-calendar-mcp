@@ -2,7 +2,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pytest
-
+from errors.exceptions import CalendarResultLimitExceededError
 from services import calendar_service
 
 TZ = ZoneInfo("Asia/Kolkata")
@@ -85,17 +85,32 @@ def test_list_events_handles_pagination(mock_calendar_service, monkeypatch):
     assert mock_calendar_service.events.return_value.list.call_args.kwargs["pageToken"] == "page_2"
 
 @pytest.mark.services
-def test_list_events_stops_at_max_results(mock_calendar_service, monkeypatch):
+def test_list_events_stops_at_max_results(
+    mock_calendar_service,
+    monkeypatch,
+):
     use_mock_service(monkeypatch, mock_calendar_service)
-    execute = mock_calendar_service.events.return_value.list.return_value.execute
+
+    execute = (
+        mock_calendar_service.events
+        .return_value.list.return_value.execute
+    )
+
     execute.return_value = {
-        "items": [{"id": "event_001"}, {"id": "event_002"}, {"id": "event_003"}],
+        "items": [
+            {"id": "event_001"},
+            {"id": "event_002"},
+        ],
         "nextPageToken": "another_page",
     }
 
-    result = calendar_service.list_events_in_range(dt(10), dt(11), max_results=2)
+    with pytest.raises(CalendarResultLimitExceededError):
+        calendar_service.list_events_in_range(
+            dt(10),
+            dt(11),
+            max_results=2,
+        )
 
-    assert len(result) == 2
     assert execute.call_count == 1
 
 @pytest.mark.services
@@ -119,6 +134,7 @@ def test_update_calendar_event_gets_then_updates_full_resource(mock_calendar_ser
     events = mock_calendar_service.events.return_value
     existing = {
         "id": "event_001",
+        "etag": '"etag-001"',
         "summary": "Old title",
         "description": "Keep this description",
         "start": {"dateTime": "2026-11-10T10:00:00+05:30"},
@@ -146,7 +162,7 @@ def test_update_calendar_event_gets_then_updates_full_resource(mock_calendar_ser
 def test_update_calendar_event_uses_supplied_existing_event(mock_calendar_service, monkeypatch):
     use_mock_service(monkeypatch, mock_calendar_service)
     events = mock_calendar_service.events.return_value
-    existing = {"id": "event_001", "summary": "Old"}
+    existing = {"id": "event_001", "etag": '"etag-001"',"summary": "Old"}
     events.update.return_value.execute.return_value = {"id": "event_001", "summary": "New"}
 
     calendar_service.update_calendar_event(
@@ -188,3 +204,106 @@ def test_list_calendars_returns_empty_list_when_no_items(mock_calendar_service, 
     mock_calendar_service.calendarList.return_value.list.return_value.execute.return_value = {}
 
     assert calendar_service.list_calendars() == []
+
+@pytest.mark.services
+def test_update_uses_if_match_etag(
+    monkeypatch,
+    mock_calendar_service,
+):
+
+    monkeypatch.setattr(
+        calendar_service,
+        "get_calendar_service",
+        lambda: mock_calendar_service,
+    )
+
+    update_request = (
+        mock_calendar_service.events().update.return_value
+    )
+
+    update_request.headers = {}
+
+    update_request.execute.return_value = {
+        "id": "test_event_001",
+        "summary": "Updated Meeting",
+    }
+
+    result = calendar_service.update_calendar_event(
+        event_id="test_event_001",
+        updates={"summary": "Updated Meeting"},
+    )
+
+    assert result["summary"] == "Updated Meeting"
+
+    assert update_request.headers["If-Match"] == (
+        '"test-etag-001"'
+    )
+
+
+@pytest.mark.services
+def test_delete_uses_if_match_etag(
+    monkeypatch,
+    mock_calendar_service,
+):
+
+    monkeypatch.setattr(
+        calendar_service,
+        "get_calendar_service",
+        lambda: mock_calendar_service,
+    )
+
+    delete_request = (
+        mock_calendar_service.events().delete.return_value
+    )
+
+    delete_request.headers = {}
+
+    result = calendar_service.delete_calendar_event(
+        event_id="test_event_001",
+    )
+
+    assert result["success"] is True
+
+    assert delete_request.headers["If-Match"] == (
+        '"test-etag-001"'
+    )
+
+@pytest.mark.services
+def test_event_search_does_not_silently_truncate(
+    monkeypatch,
+    mock_calendar_service,
+):
+
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from errors.exceptions import (
+        CalendarResultLimitExceededError,
+    )
+
+    TZ = ZoneInfo("Asia/Kolkata")
+
+    monkeypatch.setattr(
+        calendar_service,
+        "get_calendar_service",
+        lambda: mock_calendar_service,
+    )
+
+    mock_calendar_service.events().list.return_value.execute.return_value = {
+        "items": [
+            {"id": "event_001"}
+        ],
+        "nextPageToken": "next-page",
+    }
+
+    with pytest.raises(CalendarResultLimitExceededError):
+
+        calendar_service.list_events_in_range(
+            start_date=datetime(
+                2026, 11, 1, tzinfo=TZ
+            ),
+            end_date=datetime(
+                2026, 12, 1, tzinfo=TZ
+            ),
+            max_results=1,
+        )

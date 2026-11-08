@@ -1,4 +1,3 @@
-
 from datetime import datetime, timedelta
 
 from auth.google_auth import get_calendar_service
@@ -10,10 +9,10 @@ from utils.validators import (
     validate_time_range,
 )
 
-
 def check_availability(
     start_date: datetime,
     end_date: datetime,
+    calendar_id: str = CALENDAR_ID,
 ):
     validate_time_range(start_date, end_date)
 
@@ -23,7 +22,9 @@ def check_availability(
         "timeMin": to_rfc3339(start_date),
         "timeMax": to_rfc3339(end_date),
         "timeZone": TIMEZONE,
-        "items": [{"id": CALENDAR_ID}],
+        "items": [
+            {"id": calendar_id}
+        ],
     }
 
     response = service.freebusy().query(
@@ -32,7 +33,7 @@ def check_availability(
 
     calendar_data = response.get(
         "calendars", {}
-    ).get(CALENDAR_ID, {})
+    ).get(calendar_id, {})
 
     errors = calendar_data.get("errors", [])
 
@@ -47,7 +48,6 @@ def check_availability(
         "available": len(busy_periods) == 0,
         "busy_periods": busy_periods,
     }
-
 
 def find_conflicts(
     start_date: datetime,
@@ -107,3 +107,49 @@ def get_available_slots(
         })
 
     return slots
+
+def find_occurrence_conflicts(
+    occurrences: list[tuple[datetime, datetime]],
+    busy_periods: list[dict],
+) -> list[dict]:
+    """
+    Compare every event occurrence against calendar busy periods.
+
+    Two intervals overlap when:
+
+        occurrence_start < busy_end
+        AND
+        occurrence_end > busy_start
+    """
+
+    conflicts = []
+
+    for occurrence_start, occurrence_end in occurrences:
+
+        for busy_period in busy_periods:
+
+            busy_start = datetime.fromisoformat(
+                busy_period["start"].replace("Z", "+00:00")
+            )
+
+            busy_end = datetime.fromisoformat(
+                busy_period["end"].replace("Z", "+00:00")
+            )
+
+            if (
+                occurrence_start < busy_end
+                and occurrence_end > busy_start
+            ):
+
+                conflicts.append({
+                    "occurrence": {
+                        "start": occurrence_start.isoformat(),
+                        "end": occurrence_end.isoformat(),
+                    },
+                    "existing_event": {
+                        "start": busy_start.isoformat(),
+                        "end": busy_end.isoformat(),
+                    },
+                })
+
+    return conflicts

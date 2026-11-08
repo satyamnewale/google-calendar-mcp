@@ -140,9 +140,11 @@ class CreateEventSchema(StrictSchema):
         Field(
             default=None,
             gt=0,
+            le = 500,
             strict=True,
             description=(
-                "Number of times to repeat the event. " "Requires recurrence_frequency."
+                "Total number of occurrences, including the first occurrence. "
+                "Maximum 500."
             ),
         ),
     ] = None
@@ -163,6 +165,7 @@ class CreateEventSchema(StrictSchema):
         bool,
         Field(
             default=False,
+            strict=True,
             description=(
                 "Set True to repeat the event indefinitely. "
                 "Requires recurrence_frequency."
@@ -205,21 +208,40 @@ class CreateEventSchema(StrictSchema):
         value = value.strip()
 
         if not value:
-            raise ValueError("Recurrence end date cannot be empty.")
+            raise ValueError(
+                "Recurrence end date cannot be empty."
+            )
 
+        # Check ISO date: YYYY-MM-DD
         try:
             date.fromisoformat(value)
             return value
         except ValueError:
             pass
 
+        # Check ISO datetime
         try:
-            datetime.fromisoformat(value.replace("Z", "+00:00"))
+            datetime.fromisoformat(
+                value.replace("Z", "+00:00")
+            )
             return value
+
         except ValueError as exc:
             raise ValueError(
-                "recurrence_until must be an ISO date " "(YYYY-MM-DD) or ISO datetime."
+                "recurrence_until must be an ISO date "
+                "or ISO datetime."
             ) from exc
+
+    @field_validator("recurrence_days")
+    @classmethod
+    def validate_recurrence_days(cls, days):
+
+        if days is not None and len(days) != len(set(days)):
+            raise ValueError(
+                "Recurrence weekdays cannot contain duplicates."
+            )
+
+        return days
 
     @model_validator(mode="after")
     def validate_recurrence(self):
@@ -228,41 +250,59 @@ class CreateEventSchema(StrictSchema):
         has_until = self.recurrence_until is not None
         is_indefinite = self.recurrence_indefinite
 
-        termination_options = sum(
-            [
-                has_count,
-                has_until,
-                is_indefinite,
-            ]
-        )
+        termination_options = sum([
+            has_count,
+            has_until,
+            is_indefinite,
+        ])
 
         if self.recurrence_frequency is None:
 
             if self.recurrence_days:
-                raise ValueError("recurrence_days requires recurrence_frequency.")
+                raise ValueError(
+                    "recurrence_days requires recurrence_frequency."
+                )
 
             if self.recurrence_interval != 1:
-                raise ValueError("recurrence_interval requires recurrence_frequency.")
+                raise ValueError(
+                    "recurrence_interval requires recurrence_frequency."
+                )
 
             if termination_options:
                 raise ValueError(
-                    "Recurrence termination settings require " "recurrence_frequency."
+                    "Recurrence termination options require "
+                    "recurrence_frequency."
                 )
 
             return self
 
-        # Exactly one termination condition is mandatory.
         if termination_options != 1:
             raise ValueError(
-                "A recurring event must specify exactly one of: "
+                "A recurring event must specify exactly one of "
                 "recurrence_count, recurrence_until, "
                 "or recurrence_indefinite=True."
             )
 
-        if self.recurrence_days and self.recurrence_frequency != "WEEKLY":
+        if (
+            self.recurrence_days
+            and self.recurrence_frequency != "WEEKLY"
+        ):
             raise ValueError(
-                "recurrence_days is supported only with WEEKLY recurrence."
+                "recurrence_days is supported only for WEEKLY recurrence."
             )
+
+        if self.recurrence_until and self.all_day:
+
+            try:
+                date.fromisoformat(
+                    self.recurrence_until
+                )
+
+            except ValueError as exc:
+                raise ValueError(
+                    "All-day recurring events require a "
+                    "date-only recurrence_until value."
+                ) from exc
 
         return self
 
@@ -351,6 +391,16 @@ class DeleteEventSchema(StrictSchema):
             ),
         ),
     ] = False
+
+    recurrence_scope : Annotated[
+        Literal["series", "event"] | None,
+        Field(
+            default="None",
+            description=(
+                "Recurrence scope for deleting recurring events."
+            ),
+        )
+    ] = None
 
 
 # --------------------------------------------------
@@ -599,3 +649,32 @@ class AvailableSlotsSchema(StrictSchema):
             ),
         ),
     ] = 60
+
+# --------------------------------------------------
+# 11. DELETE EVENT
+# --------------------------------------------------
+
+class DeleteEventSchema(BaseModel):
+    event_id: str = Field(min_length=1)
+    confirmed: bool = False
+    recurrence_scope: str | None = None
+
+    @field_validator("event_id")
+    @classmethod
+    def validate_event_id(cls, value: str) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError("event_id cannot be empty.")
+
+        return value
+
+    @field_validator("recurrence_scope")
+    @classmethod
+    def validate_recurrence_scope(cls, value):
+        if value not in (None, "series"):
+            raise ValueError(
+                "recurrence_scope must be 'series' or None."
+            )
+
+        return value

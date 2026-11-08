@@ -17,6 +17,7 @@ from utils.datetime_utils import (
     to_rfc3339,
 )
 
+from utils import datetime_utils
 
 TIMEZONE = ZoneInfo("Asia/Kolkata")
 
@@ -159,3 +160,59 @@ def test_to_rfc3339():
 def test_parse_empty_date():
     with pytest.raises((ValueError, TypeError)):
         parse_date("")
+
+@pytest.mark.unit
+def test_next_monday_on_sunday(monkeypatch):
+
+    monkeypatch.setattr(
+        datetime_utils,
+        "get_now",
+        lambda: datetime(
+            2026, 11, 8, 10, 0,
+            tzinfo=ZoneInfo("Asia/Kolkata"),
+        ),
+    )
+
+    result = datetime_utils.resolve_date_expression(
+        "next Monday"
+    )
+
+    assert result == date(2026, 11, 9)
+
+
+@pytest.mark.unit
+def test_next_monday_on_tuesday(monkeypatch):
+
+    monkeypatch.setattr(
+        datetime_utils,
+        "get_now",
+        lambda: datetime(
+            2026, 11, 10, 10, 0,
+            tzinfo=ZoneInfo("Asia/Kolkata"),
+        ),
+    )
+
+    result = datetime_utils.resolve_date_expression(
+        "next Monday"
+    )
+
+    assert result == date(2026, 11, 16)
+
+
+@pytest.mark.unit
+def test_next_monday_on_monday(monkeypatch):
+
+    monkeypatch.setattr(
+        datetime_utils,
+        "get_now",
+        lambda: datetime(
+            2026, 11, 9, 10, 0,
+            tzinfo=ZoneInfo("Asia/Kolkata"),
+        ),
+    )
+
+    result = datetime_utils.resolve_date_expression(
+        "next Monday"
+    )
+
+    assert result == date(2026, 11, 16)

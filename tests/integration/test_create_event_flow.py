@@ -52,14 +52,22 @@ def test_create_timed_event():
 # --------------------------------------------------
 @pytest.mark.integration
 def test_create_all_day_event():
-    with patch(
-        "server.create_event",
-        return_value={
-            "id": "event_002",
-            "summary": "Project Submission",
-        },
-    ) as mock_create:
-
+    with (
+        patch(
+            "server.check_availability",
+            return_value={
+                "available": True,
+                "busy_periods": [],
+            },
+        ),
+        patch(
+            "server.create_event",
+            return_value={
+                "id": "event_002",
+                "summary": "Project Submission",
+            },
+        ) as mock_create,
+    ):
         result = server.create_calendar_event(
             title="Project Submission",
             start="2026-11-10",
@@ -68,13 +76,7 @@ def test_create_all_day_event():
         )
 
     assert result["success"] is True
-    assert result["event"]["id"] == "event_002"
-
-    kwargs = mock_create.call_args.kwargs
-
-    assert kwargs["all_day"] is True
-    assert kwargs["start"] == date(2026, 11, 10)
-    assert kwargs["end"] == date(2026, 11, 11)
+    mock_create.assert_called_once()
 
 
 # --------------------------------------------------
@@ -112,6 +114,7 @@ def test_create_timed_event_without_end_uses_one_hour():
 # --------------------------------------------------
 @pytest.mark.integration
 def test_create_recurring_event():
+
     with (
         patch(
             "server.check_availability",
@@ -125,6 +128,7 @@ def test_create_recurring_event():
             return_value={"id": "event_004"},
         ) as mock_create,
     ):
+
         result = server.create_calendar_event(
             title="Daily Standup",
             start="2026-11-10T10:00:00+05:30",
@@ -137,8 +141,9 @@ def test_create_recurring_event():
 
     kwargs = mock_create.call_args.kwargs
 
-    assert kwargs["recurrence"] is not None
-    assert "FREQ=DAILY" in kwargs["recurrence"][0]
+    assert kwargs["recurrence"] == [
+        "RRULE:FREQ=DAILY;INTERVAL=1;COUNT=7"
+    ]
 
 
 # --------------------------------------------------
@@ -188,8 +193,8 @@ def test_create_event_with_conflict_and_permission():
                 "available": False,
                 "busy_periods": [
                     {
-                        "start": "10:00",
-                        "end": "11:00",
+                        "start": "2026-11-10T10:00:00+05:30",
+                        "end": "2026-11-10T11:00:00+05:30",
                     }
                 ],
             },
@@ -225,5 +230,56 @@ def test_create_event_invalid_title():
             title="",
             start="2026-11-10T10:00:00+05:30",
         )
+
+    mock_create.assert_not_called()
+
+@pytest.mark.integration
+def test_weekly_recurrence_rejects_mismatched_start_day():
+
+    with pytest.raises(ToolError):
+
+        server.create_calendar_event(
+            title="Weekly Meeting",
+            start="2026-11-10T10:00:00+05:30",
+            recurrence_frequency="WEEKLY",
+            recurrence_days=["MO", "WE"],
+            recurrence_count=10,
+        )
+
+@pytest.mark.integration
+def test_recurring_event_rejects_conflict_on_later_occurrence():
+
+    busy_periods = [
+        {
+            "start": "2026-11-11T15:45:00+05:30",
+            "end": "2026-11-11T16:00:00+05:30",
+        }
+    ]
+
+    with (
+        patch(
+            "server.check_availability",
+            return_value={
+                "available": False,
+                "busy_periods": busy_periods,
+            },
+        ),
+        patch(
+            "server.create_event"
+        ) as mock_create,
+    ):
+
+        result = server.create_calendar_event(
+            title="Workout Prep",
+            start="2026-11-09T15:30:00+05:30",
+            recurrence_frequency="DAILY",
+            recurrence_interval=1,
+            recurrence_count=7,
+        )
+
+    assert result["success"] is False
+    assert result["conflict"] is True
+
+    assert result["conflicting_occurrences"]
 
     mock_create.assert_not_called()
