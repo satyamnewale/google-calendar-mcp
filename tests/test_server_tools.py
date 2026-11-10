@@ -601,6 +601,7 @@ def test_find_calendar_events():
         "Team",
     )
 
+
 def test_find_calendar_events_without_title():
 
     parsed_start = datetime(
