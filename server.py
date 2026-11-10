@@ -44,7 +44,9 @@ from utils.datetime_utils import (
     parse_date_or_datetime,
     resolve_date_expression,
     get_timezone,
+    parse_search_range,
 )
+
 from utils.recurrence_utils import (
     build_recurrence_rule,
     generate_occurrence_windows,
@@ -754,9 +756,14 @@ def find_calendar_events(
         }
     )
 
+    start_datetime, end_datetime = parse_search_range(
+        payload.start,
+        payload.end,
+    )
+
     return search_events(
-        parse_datetime(payload.start),
-        parse_datetime(payload.end),
+        start_datetime,
+        end_datetime,
         payload.title,
     )
 
@@ -812,10 +819,15 @@ def find_similar_calendar_events(
         }
     )
 
+    start_datetime, end_datetime = parse_search_range(
+        payload.start,
+        payload.end,
+    )
+
     return find_similar_events(
         payload.title,
-        parse_datetime(payload.start),
-        parse_datetime(payload.end),
+        start_datetime,
+        end_datetime,
     )
 
 
