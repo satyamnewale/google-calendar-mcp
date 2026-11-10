@@ -968,9 +968,9 @@ def suggest_available_slots(
             gt=0,
             le=1440,
             description=(
-                "Minimum duration required for each suggested available slot, expressed in minutes. "
-                "For example, 60 identifies free periods lasting at least one hour."
-            ),
+    "Exact duration of each suggested available slot in minutes. "
+    "For example, 60 returns candidate slots lasting exactly one hour."
+),
         ),
     ] = 60,
     slot_interval_minutes: Annotated[
