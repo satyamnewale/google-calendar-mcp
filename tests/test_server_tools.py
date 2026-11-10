@@ -810,6 +810,8 @@ def test_suggest_available_slots():
         parsed_start,
         parsed_end,
         45,
+        15,
+        10,
     )
 
 

@@ -973,6 +973,24 @@ def suggest_available_slots(
             ),
         ),
     ] = 60,
+    slot_interval_minutes: Annotated[
+        int,
+        Field(
+            default=15,
+            gt=0,
+            le=1440,
+            description="Interval between consecutive candidate start times.",
+        ),
+    ] = 15,
+    max_suggestions: Annotated[
+        int,
+        Field(
+            default=10,
+            ge=1,
+            le=50,
+            description="Maximum number of slots to return.",
+        ),
+    ] = 10,
 ) -> list:
     """
     Find available time slots within a specified date and time range.
@@ -988,6 +1006,8 @@ def suggest_available_slots(
             "start": start,
             "end": end,
             "duration_minutes": duration_minutes,
+            "slot_interval_minutes": slot_interval_minutes,
+            "max_suggestions": max_suggestions,
         }
     )
 
@@ -995,6 +1015,8 @@ def suggest_available_slots(
         parse_datetime(payload.start),
         parse_datetime(payload.end),
         payload.duration_minutes,
+        payload.slot_interval_minutes,
+        payload.max_suggestions,
     )
 
 

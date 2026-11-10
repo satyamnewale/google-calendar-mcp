@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from unittest.mock import MagicMock
 
@@ -154,19 +154,37 @@ def test_find_conflicts_returns_busy_periods(monkeypatch):
 
     assert availability_service.find_conflicts(dt(9), dt(12)) == expected
 
+
 @pytest.mark.services
-def test_get_available_slots_returns_free_windows(mock_freebusy):
+def test_get_available_slots_returns_fixed_duration_candidates(
+    mock_freebusy,
+):
     set_busy(mock_freebusy, [
-        {"start": "2026-11-10T10:00:00+05:30",
-         "end": "2026-11-10T11:00:00+05:30"}
+        {
+            "start": "2026-11-10T10:00:00+05:30",
+            "end": "2026-11-10T11:00:00+05:30",
+        }
     ])
 
-    result = availability_service.get_available_slots(dt(9), dt(13), duration_minutes=60)
+    result = availability_service.get_available_slots(
+        dt(9),
+        dt(13),
+        duration_minutes=60,
+        slot_interval_minutes=15,
+        max_suggestions=10,
+    )
 
-    assert result == [
+    expected = [
         {"start": dt(9).isoformat(), "end": dt(10).isoformat()},
-        {"start": dt(11).isoformat(), "end": dt(13).isoformat()},
+        {"start": dt(11).isoformat(), "end": dt(12).isoformat()},
+        {"start": dt(11, 15).isoformat(), "end": dt(12, 15).isoformat()},
+        {"start": dt(11, 30).isoformat(), "end": dt(12, 30).isoformat()},
+        {"start": dt(11, 45).isoformat(), "end": dt(12, 45).isoformat()},
+        {"start": dt(12).isoformat(), "end": dt(13).isoformat()},
     ]
+
+    assert result == expected
+
 
 @pytest.mark.services
 def test_get_available_slots_excludes_windows_shorter_than_duration(mock_freebusy):
@@ -202,3 +220,68 @@ def test_get_available_slots_propagates_freebusy_api_failure(mock_freebusy):
 
     with pytest.raises(RuntimeError, match="Google API failure"):
         availability_service.get_available_slots(dt(9), dt(10), 30)
+
+
+
+@pytest.mark.services
+def test_get_available_slots_returns_fixed_duration_slots(mock_freebusy):
+
+    set_busy(mock_freebusy, [
+        {
+            "start": "2026-11-10T10:00:00+05:30",
+            "end": "2026-11-10T11:00:00+05:30",
+        }
+    ])
+
+    result = availability_service.get_available_slots(
+        dt(9),
+        dt(13),
+        duration_minutes=60,
+        slot_interval_minutes=15,
+        max_suggestions=10,
+    )
+
+    expected = [
+        {"start": dt(9).isoformat(), "end": dt(10).isoformat()},
+
+        {"start": dt(11).isoformat(), "end": dt(12).isoformat()},
+        {"start": dt(11, 15).isoformat(), "end": dt(12, 15).isoformat()},
+        {"start": dt(11, 30).isoformat(), "end": dt(12, 30).isoformat()},
+        {"start": dt(11, 45).isoformat(), "end": dt(12, 45).isoformat()},
+        {"start": dt(12).isoformat(), "end": dt(13).isoformat()},
+    ]
+
+    assert result == expected
+
+
+@pytest.mark.services
+def test_slots_never_overlap_busy_period(mock_freebusy):
+
+    set_busy(mock_freebusy, [
+        {
+            "start": dt(10, 30).isoformat(),
+            "end": dt(11, 30).isoformat(),
+        }
+    ])
+
+    result = availability_service.get_available_slots(
+        dt(10),
+        dt(12),
+        duration_minutes=45,
+        slot_interval_minutes=15,
+        max_suggestions=10,
+    )
+
+    for slot in result:
+
+        slot_start = datetime.fromisoformat(slot["start"])
+        slot_end = datetime.fromisoformat(slot["end"])
+
+        assert slot_end - slot_start == timedelta(minutes=45)
+
+        assert (
+            slot_end <= dt(10, 30)
+            or slot_start >= dt(11, 30)
+        )
+
+
