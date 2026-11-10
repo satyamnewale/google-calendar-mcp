@@ -395,7 +395,7 @@ class DeleteEventSchema(StrictSchema):
     recurrence_scope : Annotated[
         Literal["series", "event"] | None,
         Field(
-            default="None",
+            default=None,
             description=(
                 "Recurrence scope for deleting recurring events."
             ),
@@ -654,27 +654,38 @@ class AvailableSlotsSchema(StrictSchema):
 # 11. DELETE EVENT
 # --------------------------------------------------
 
-class DeleteEventSchema(BaseModel):
-    event_id: str = Field(min_length=1)
-    confirmed: bool = False
-    recurrence_scope: str | None = None
 
-    @field_validator("event_id")
-    @classmethod
-    def validate_event_id(cls, value: str) -> str:
-        value = value.strip()
+class DeleteEventSchema(StrictSchema):
 
-        if not value:
-            raise ValueError("event_id cannot be empty.")
+    event_id: Annotated[
+        str,
+        Field(
+            min_length=1,
+            description=(
+                "Unique Google Calendar event ID identifying "
+                "the event to delete."
+            ),
+        ),
+    ]
 
-        return value
+    confirmed: Annotated[
+        bool,
+        Field(
+            default=False,
+            description=(
+                "Explicit user confirmation required before deletion."
+            ),
+        ),
+    ] = False
 
-    @field_validator("recurrence_scope")
-    @classmethod
-    def validate_recurrence_scope(cls, value):
-        if value not in (None, "series"):
-            raise ValueError(
-                "recurrence_scope must be 'series' or None."
-            )
-
-        return value
+    recurrence_scope: Annotated[
+        Literal["series", "event"] | None,
+        Field(
+            default=None,
+            description=(
+                "'event' deletes one recurring occurrence. "
+                "'series' deletes the entire recurring series. "
+                "None is used for a normal event."
+            ),
+        ),
+    ] = None

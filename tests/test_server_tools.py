@@ -568,18 +568,18 @@ def test_find_calendar_events():
     ]
 
     parsed_start = datetime(
-        2026, 11, 10, tzinfo=TZ
+        2026, 11, 10, 10, 0, tzinfo=TZ
     )
 
     parsed_end = datetime(
-        2026, 11, 11, tzinfo=TZ
+        2026, 11, 10, 11, 0, tzinfo=TZ
     )
 
     with (
         patch(
-            "server.parse_datetime",
-            side_effect=[parsed_start, parsed_end],
-        ),
+            "server.parse_search_range",
+            return_value=(parsed_start, parsed_end),
+        ) as mock_range,
         patch(
             "server.search_events",
             return_value=expected,
@@ -593,6 +593,8 @@ def test_find_calendar_events():
 
     assert result == expected
 
+    mock_range.assert_called_once_with(START, END)
+
     mock_search.assert_called_once_with(
         parsed_start,
         parsed_end,
@@ -601,19 +603,20 @@ def test_find_calendar_events():
 
 
 def test_find_calendar_events_without_title():
+
     parsed_start = datetime(
-        2026, 11, 10, tzinfo=TZ
+        2026, 11, 10, 10, 0, tzinfo=TZ
     )
 
     parsed_end = datetime(
-        2026, 11, 11, tzinfo=TZ
+        2026, 11, 10, 11, 0, tzinfo=TZ
     )
 
     with (
         patch(
-            "server.parse_datetime",
-            side_effect=[parsed_start, parsed_end],
-        ),
+            "server.parse_search_range",
+            return_value=(parsed_start, parsed_end),
+        ) as mock_range,
         patch(
             "server.search_events",
             return_value=[],
@@ -626,18 +629,20 @@ def test_find_calendar_events_without_title():
 
     assert result == []
 
+    mock_range.assert_called_once_with(START, END)
+
     mock_search.assert_called_once_with(
         parsed_start,
         parsed_end,
         None,
     )
 
-
 # --------------------------------------------------
 # 8. FIND SIMILAR CALENDAR EVENTS
 # --------------------------------------------------
 
 def test_find_similar_calendar_events():
+
     expected = [
         {
             "event": {
@@ -649,18 +654,18 @@ def test_find_similar_calendar_events():
     ]
 
     parsed_start = datetime(
-        2026, 11, 10, tzinfo=TZ
+        2026, 11, 10, 10, 0, tzinfo=TZ
     )
 
     parsed_end = datetime(
-        2026, 11, 11, tzinfo=TZ
+        2026, 11, 10, 11, 0, tzinfo=TZ
     )
 
     with (
         patch(
-            "server.parse_datetime",
-            side_effect=[parsed_start, parsed_end],
-        ),
+            "server.parse_search_range",
+            return_value=(parsed_start, parsed_end),
+        ) as mock_range,
         patch(
             "server.find_similar_events",
             return_value=expected,
@@ -673,6 +678,8 @@ def test_find_similar_calendar_events():
         )
 
     assert result == expected
+
+    mock_range.assert_called_once_with(START, END)
 
     mock_similar.assert_called_once_with(
         "Team Meeting",

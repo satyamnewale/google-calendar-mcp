@@ -432,3 +432,55 @@ def test_available_slots_zero_duration():
 
     with pytest.raises(ValidationError):
         AvailableSlotsSchema.model_validate(payload)
+
+
+@pytest.mark.unit
+def test_delete_event_schema_defaults_recurrence_scope_to_none():
+
+    result = DeleteEventSchema.model_validate(
+        {
+            "event_id": "event_001",
+            "confirmed": True,
+        }
+    )
+
+    assert result.recurrence_scope is None
+
+@pytest.mark.unit
+def test_delete_event_schema_accepts_occurrence_scope():
+
+    result = DeleteEventSchema.model_validate(
+        {
+            "event_id": "occurrence_001",
+            "confirmed": True,
+            "recurrence_scope": "event",
+        }
+    )
+
+    assert result.recurrence_scope == "event"
+
+@pytest.mark.unit
+def test_delete_event_schema_accepts_series_scope():
+
+    result = DeleteEventSchema.model_validate(
+        {
+            "event_id": "series_001",
+            "confirmed": True,
+            "recurrence_scope": "series",
+        }
+    )
+
+    assert result.recurrence_scope == "series"
+
+@pytest.mark.unit
+def test_delete_event_schema_rejects_invalid_scope():
+
+    with pytest.raises(ValidationError):
+
+        DeleteEventSchema.model_validate(
+            {
+                "event_id": "event_001",
+                "confirmed": True,
+                "recurrence_scope": "all",
+            }
+        )

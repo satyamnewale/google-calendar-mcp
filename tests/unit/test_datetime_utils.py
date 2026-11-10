@@ -15,6 +15,7 @@ from utils.datetime_utils import (
     get_week_range,
     get_month_range,
     to_rfc3339,
+    parse_search_range,
 )
 
 from utils import datetime_utils
@@ -216,3 +217,60 @@ def test_next_monday_on_monday(monkeypatch):
     )
 
     assert result == date(2026, 11, 16)
+
+
+@pytest.mark.unit
+def test_parse_search_range_includes_entire_end_date():
+
+    start, end = parse_search_range(
+        "2026-11-10",
+        "2026-11-30",
+    )
+
+    assert start == datetime(
+        2026, 11, 10, 0, 0,
+        tzinfo=TIMEZONE,
+    )
+
+    assert end == datetime(
+        2026, 12, 1, 0, 0,
+        tzinfo=TIMEZONE,
+    )
+
+@pytest.mark.unit
+def test_parse_search_range_preserves_explicit_datetime():
+
+    start, end = parse_search_range(
+        "2026-11-10T10:00:00+05:30",
+        "2026-11-10T11:00:00+05:30",
+    )
+
+    assert start == datetime(
+        2026, 11, 10, 10, 0,
+        tzinfo=TIMEZONE,
+    )
+
+    assert end == datetime(
+        2026, 11, 10, 11, 0,
+        tzinfo=TIMEZONE,
+    )
+
+@pytest.mark.unit
+def test_parse_search_range_supports_relative_date():
+
+    start, end = parse_search_range(
+        "2026-11-10",
+        "2026-11-30",
+    )
+
+    assert start.date() == date(2026, 11, 10)
+    assert end.date() == date(2026, 12, 1)
+
+@pytest.mark.unit
+def test_parse_search_range_rejects_invalid_range():
+
+    with pytest.raises(ValueError):
+        parse_search_range(
+            "2026-11-30",
+            "2026-11-10",
+        )
