@@ -392,14 +392,17 @@ class DeleteEventSchema(StrictSchema):
         ),
     ] = False
 
-    recurrence_scope : Annotated[
+    
+    recurrence_scope: Annotated[
         Literal["series", "event"] | None,
         Field(
             default=None,
             description=(
-                "Recurrence scope for deleting recurring events."
+                "Use 'event' to delete one recurring occurrence. "
+                "Use 'series' to delete the entire recurring series. "
+                "Leave None for a normal one-time event."
             ),
-        )
+        ),
     ] = None
 
 
@@ -613,6 +616,7 @@ class AvailabilitySchema(StrictSchema):
 # --------------------------------------------------
 
 
+
 class AvailableSlotsSchema(StrictSchema):
 
     start: Annotated[
@@ -620,8 +624,8 @@ class AvailableSlotsSchema(StrictSchema):
         Field(
             min_length=1,
             description=(
-                "Beginning of the date or datetime range in which available slots should be identified. "
-                "Provide an ISO datetime or supported date expression."
+                "Beginning of the date or datetime range "
+                "for available slot discovery."
             ),
         ),
     ]
@@ -631,8 +635,8 @@ class AvailableSlotsSchema(StrictSchema):
         Field(
             min_length=1,
             description=(
-                "Ending of the date or datetime range for finding available slots. "
-                "Must occur after start and defines the scheduling window."
+                "Ending of the date or datetime range "
+                "for available slot discovery."
             ),
         ),
     ]
@@ -643,12 +647,32 @@ class AvailableSlotsSchema(StrictSchema):
             default=60,
             gt=0,
             le=1440,
-            description=(
-                "Minimum duration required for each suggested available slot, expressed in minutes. "
-                "For example, 60 identifies free periods lasting at least one hour."
-            ),
+            description="Exact duration of each suggested slot in minutes.",
         ),
     ] = 60
+
+    slot_interval_minutes: Annotated[
+        int,
+        Field(
+            default=15,
+            gt=0,
+            le=1440,
+            description=(
+                "Minutes between consecutive suggested start times."
+            ),
+        ),
+    ] = 15
+
+    max_suggestions: Annotated[
+        int,
+        Field(
+            default=10,
+            ge=1,
+            le=50,
+            description="Maximum number of candidate slots to return.",
+        ),
+    ] = 10
+
 
 # --------------------------------------------------
 # 11. DELETE EVENT
