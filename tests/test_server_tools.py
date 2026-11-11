@@ -1,4 +1,3 @@
-
 import asyncio
 import inspect
 from datetime import datetime
@@ -8,7 +7,6 @@ from zoneinfo import ZoneInfo
 import pytest
 
 import server
-
 
 TZ = ZoneInfo("Asia/Kolkata")
 
@@ -22,6 +20,7 @@ NEW_END = "2026-11-12T11:00:00+05:30"
 # --------------------------------------------------
 # 1. MCP TOOL REGISTRATION
 # --------------------------------------------------
+
 
 def test_server_has_expected_tools():
     expected_tools = {
@@ -46,9 +45,7 @@ def test_server_has_expected_tools():
     else:
         registered_tools = result
 
-    registered_names = {
-        tool.name for tool in registered_tools
-    }
+    registered_names = {tool.name for tool in registered_tools}
 
     assert registered_names == expected_tools
 
@@ -56,6 +53,7 @@ def test_server_has_expected_tools():
 # --------------------------------------------------
 # 2. CREATE CALENDAR EVENT
 # --------------------------------------------------
+
 
 def test_create_calendar_event_valid_timed_event():
     expected_event = {
@@ -171,13 +169,9 @@ def test_create_calendar_event_uses_default_one_hour_end():
 
     assert result["success"] is True
 
-    availability_start, availability_end = (
-        mock_availability.call_args.args
-    )
+    availability_start, availability_end = mock_availability.call_args.args
 
-    assert (
-        availability_end - availability_start
-    ).total_seconds() == 3600
+    assert (availability_end - availability_start).total_seconds() == 3600
 
     assert mock_create.call_args.kwargs["end"] == availability_end
 
@@ -275,9 +269,7 @@ def test_create_calendar_event_builds_recurrence_rule():
         ),
         patch(
             "server.build_recurrence_rule",
-            return_value=[
-                "RRULE:FREQ=DAILY;INTERVAL=1;COUNT=7"
-            ],
+            return_value=["RRULE:FREQ=DAILY;INTERVAL=1;COUNT=7"],
         ) as mock_rule,
         patch(
             "server.create_event",
@@ -323,6 +315,7 @@ def test_create_calendar_event_rejects_invalid_recurrence_interval():
 # --------------------------------------------------
 # 3. EDIT CALENDAR EVENT
 # --------------------------------------------------
+
 
 def test_edit_calendar_event_valid_input():
     expected = {
@@ -380,6 +373,7 @@ def test_edit_calendar_event_rejects_unsupported_update_field():
 # 4. DELETE CALENDAR EVENT
 # --------------------------------------------------
 
+
 def test_remove_calendar_event_requires_confirmation():
     with (
         patch("server.delete_event") as mock_delete,
@@ -420,6 +414,7 @@ def test_remove_calendar_event_after_confirmation():
 # 5. GET CALENDAR EVENT
 # --------------------------------------------------
 
+
 def test_get_calendar_event_returns_details():
     expected = {
         "id": "event_001",
@@ -447,6 +442,7 @@ def test_get_calendar_event_rejects_empty_id():
 # 6. POSTPONE CALENDAR EVENT
 # --------------------------------------------------
 
+
 def test_postpone_timed_calendar_event():
     existing = {
         "id": "event_001",
@@ -463,13 +459,9 @@ def test_postpone_timed_calendar_event():
         "summary": "Team Meeting",
     }
 
-    parsed_start = datetime(
-        2026, 11, 12, 10, 0, tzinfo=TZ
-    )
+    parsed_start = datetime(2026, 11, 12, 10, 0, tzinfo=TZ)
 
-    parsed_end = datetime(
-        2026, 11, 12, 11, 0, tzinfo=TZ
-    )
+    parsed_end = datetime(2026, 11, 12, 11, 0, tzinfo=TZ)
 
     with (
         patch(
@@ -517,13 +509,9 @@ def test_postpone_all_day_calendar_event():
         "summary": "Project Submission",
     }
 
-    parsed_start = datetime(
-        2026, 11, 12, tzinfo=TZ
-    ).date()
+    parsed_start = datetime(2026, 11, 12, tzinfo=TZ).date()
 
-    parsed_end = datetime(
-        2026, 11, 13, tzinfo=TZ
-    ).date()
+    parsed_end = datetime(2026, 11, 13, tzinfo=TZ).date()
 
     with (
         patch(
@@ -559,6 +547,7 @@ def test_postpone_all_day_calendar_event():
 # 7. FIND CALENDAR EVENTS
 # --------------------------------------------------
 
+
 def test_find_calendar_events():
     expected = [
         {
@@ -567,13 +556,9 @@ def test_find_calendar_events():
         }
     ]
 
-    parsed_start = datetime(
-        2026, 11, 10, 10, 0, tzinfo=TZ
-    )
+    parsed_start = datetime(2026, 11, 10, 10, 0, tzinfo=TZ)
 
-    parsed_end = datetime(
-        2026, 11, 10, 11, 0, tzinfo=TZ
-    )
+    parsed_end = datetime(2026, 11, 10, 11, 0, tzinfo=TZ)
 
     with (
         patch(
@@ -604,13 +589,9 @@ def test_find_calendar_events():
 
 def test_find_calendar_events_without_title():
 
-    parsed_start = datetime(
-        2026, 11, 10, 10, 0, tzinfo=TZ
-    )
+    parsed_start = datetime(2026, 11, 10, 10, 0, tzinfo=TZ)
 
-    parsed_end = datetime(
-        2026, 11, 10, 11, 0, tzinfo=TZ
-    )
+    parsed_end = datetime(2026, 11, 10, 11, 0, tzinfo=TZ)
 
     with (
         patch(
@@ -637,9 +618,11 @@ def test_find_calendar_events_without_title():
         None,
     )
 
+
 # --------------------------------------------------
 # 8. FIND SIMILAR CALENDAR EVENTS
 # --------------------------------------------------
+
 
 def test_find_similar_calendar_events():
 
@@ -653,13 +636,9 @@ def test_find_similar_calendar_events():
         }
     ]
 
-    parsed_start = datetime(
-        2026, 11, 10, 10, 0, tzinfo=TZ
-    )
+    parsed_start = datetime(2026, 11, 10, 10, 0, tzinfo=TZ)
 
-    parsed_end = datetime(
-        2026, 11, 10, 11, 0, tzinfo=TZ
-    )
+    parsed_end = datetime(2026, 11, 10, 11, 0, tzinfo=TZ)
 
     with (
         patch(
@@ -691,6 +670,7 @@ def test_find_similar_calendar_events():
 # --------------------------------------------------
 # 9. GET CALENDAR OVERVIEW
 # --------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "period",
@@ -731,19 +711,16 @@ def test_get_calendar_overview_rejects_invalid_period():
 # 10. CHECK CALENDAR AVAILABILITY
 # --------------------------------------------------
 
+
 def test_check_calendar_availability():
     expected = {
         "available": True,
         "busy_periods": [],
     }
 
-    parsed_start = datetime(
-        2026, 11, 10, 10, 0, tzinfo=TZ
-    )
+    parsed_start = datetime(2026, 11, 10, 10, 0, tzinfo=TZ)
 
-    parsed_end = datetime(
-        2026, 11, 10, 11, 0, tzinfo=TZ
-    )
+    parsed_end = datetime(2026, 11, 10, 11, 0, tzinfo=TZ)
 
     with (
         patch(
@@ -772,6 +749,7 @@ def test_check_calendar_availability():
 # 11. SUGGEST AVAILABLE SLOTS
 # --------------------------------------------------
 
+
 def test_suggest_available_slots():
     expected = [
         {
@@ -780,13 +758,9 @@ def test_suggest_available_slots():
         }
     ]
 
-    parsed_start = datetime(
-        2026, 11, 10, 9, 0, tzinfo=TZ
-    )
+    parsed_start = datetime(2026, 11, 10, 9, 0, tzinfo=TZ)
 
-    parsed_end = datetime(
-        2026, 11, 10, 17, 0, tzinfo=TZ
-    )
+    parsed_end = datetime(2026, 11, 10, 17, 0, tzinfo=TZ)
 
     with (
         patch(
@@ -812,6 +786,61 @@ def test_suggest_available_slots():
         45,
         15,
         10,
+        None,
+        None,
+        False,
+    )
+
+def test_suggest_available_slots_passes_workday_parameters():
+
+    expected = [
+        {
+            "start": START,
+            "end": END,
+        }
+    ]
+
+    parsed_start = datetime(
+        2026, 11, 10, 0, 0, tzinfo=TZ
+    )
+
+    parsed_end = datetime(
+        2026, 11, 17, 23, 59, tzinfo=TZ
+    )
+
+    with (
+        patch(
+            "server.parse_datetime",
+            side_effect=[parsed_start, parsed_end],
+        ),
+        patch(
+            "server.get_available_slots",
+            return_value=expected,
+        ) as mock_slots,
+    ):
+
+        result = server.suggest_available_slots(
+            start=START,
+            end=END,
+            duration_minutes=90,
+            slot_interval_minutes=15,
+            max_suggestions=3,
+            workday_start_time="10:00",
+            workday_end_time="17:00",
+            exclude_weekends=True,
+        )
+
+    assert result == expected
+
+    mock_slots.assert_called_once_with(
+        parsed_start,
+        parsed_end,
+        90,
+        15,
+        3,
+        "10:00",
+        "17:00",
+        True,
     )
 
 
@@ -827,6 +856,7 @@ def test_suggest_available_slots_rejects_non_positive_duration():
 # --------------------------------------------------
 # 12. GET CALENDAR LIST
 # --------------------------------------------------
+
 
 def test_get_calendar_list_returns_selected_calendar_fields():
     calendars = [

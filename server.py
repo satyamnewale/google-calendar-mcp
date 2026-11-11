@@ -968,9 +968,9 @@ def suggest_available_slots(
             gt=0,
             le=1440,
             description=(
-    "Exact duration of each suggested available slot in minutes. "
-    "For example, 60 returns candidate slots lasting exactly one hour."
-),
+                "Exact duration of each suggested available slot in minutes. "
+                "For example, 60 returns candidate slots lasting exactly one hour."
+            ),
         ),
     ] = 60,
     slot_interval_minutes: Annotated[
@@ -991,6 +991,36 @@ def suggest_available_slots(
             description="Maximum number of slots to return.",
         ),
     ] = 10,
+    workday_start_time: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description=(
+                "Daily working-hours start in HH:MM format, "
+                "for example 10:00."
+            ),
+        ),
+    ] = None,
+    workday_end_time: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description=(
+                "Daily working-hours end in HH:MM format, "
+                "for example 17:00."
+            ),
+        ),
+    ] = None,
+    exclude_weekends: Annotated[
+        bool,
+        Field(
+            default=False,
+            description=(
+                "Skip Saturday and Sunday. "
+                "Requires workday_start_time and workday_end_time."
+            ),
+        ),
+    ] = False,
 ) -> list:
     """
     Find available time slots within a specified date and time range.
@@ -1008,6 +1038,9 @@ def suggest_available_slots(
             "duration_minutes": duration_minutes,
             "slot_interval_minutes": slot_interval_minutes,
             "max_suggestions": max_suggestions,
+            "workday_start_time": workday_start_time,
+            "workday_end_time": workday_end_time,
+            "exclude_weekends": exclude_weekends,
         }
     )
 
@@ -1017,6 +1050,9 @@ def suggest_available_slots(
         payload.duration_minutes,
         payload.slot_interval_minutes,
         payload.max_suggestions,
+        payload.workday_start_time,
+        payload.workday_end_time,
+        payload.exclude_weekends,
     )
 
 

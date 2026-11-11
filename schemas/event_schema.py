@@ -1,5 +1,5 @@
 from typing import Annotated, Literal
-from datetime import date, datetime
+from datetime import date, datetime, time as datetime_time
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -11,20 +11,15 @@ from pydantic import (
 # --------------------------------------------------
 # COMMON CONFIGURATION
 # --------------------------------------------------
-
-
 class StrictSchema(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
         str_strip_whitespace=True,
     )
 
-
 # --------------------------------------------------
 # 1. CREATE EVENT
 # --------------------------------------------------
-
-
 class CreateEventSchema(StrictSchema):
 
     title: Annotated[
@@ -615,8 +610,6 @@ class AvailabilitySchema(StrictSchema):
 # 10. SUGGEST AVAILABLE SLOTS
 # --------------------------------------------------
 
-
-
 class AvailableSlotsSchema(StrictSchema):
 
     start: Annotated[
@@ -672,6 +665,101 @@ class AvailableSlotsSchema(StrictSchema):
             description="Maximum number of candidate slots to return.",
         ),
     ] = 10
+
+    workday_start_time: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description=(
+                "Optional daily working-hours start in HH:MM format, "
+                "for example 10:00."
+            ),
+        ),
+    ] = None
+
+    workday_end_time: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description=(
+                "Optional daily working-hours end in HH:MM format, "
+                "for example 17:00."
+            ),
+        ),
+    ] = None
+
+    exclude_weekends: Annotated[
+        bool,
+        Field(
+            default=False,
+            description=(
+                "When True, skip Saturday and Sunday. "
+                "Requires working-hours boundaries."
+            ),
+        ),
+    ] = False
+
+    @field_validator(
+        "workday_start_time",
+        "workday_end_time",
+    )
+    @classmethod
+    def validate_workday_time(cls, value):
+
+        if value is None:
+            return None
+
+        if not isinstance(value, str) or len(value) != 5:
+            raise ValueError(
+                "Working-hours times must use HH:MM format."
+            )
+
+        try:
+            parsed = datetime_time.fromisoformat(value)
+
+        except ValueError as exc:
+            raise ValueError(
+                "Working-hours times must use valid HH:MM values."
+            ) from exc
+
+        if (
+            parsed.tzinfo is not None
+            or parsed.second != 0
+            or parsed.microsecond != 0
+        ):
+            raise ValueError(
+                "Working-hours times must use HH:MM format."
+            )
+
+        return value
+
+    @model_validator(mode="after")
+    def validate_workday_window(self):
+
+        start = self.workday_start_time
+        end = self.workday_end_time
+
+        if (start is None) != (end is None):
+            raise ValueError(
+                "Provide both workday_start_time and workday_end_time."
+            )
+
+        if self.exclude_weekends and start is None:
+            raise ValueError(
+                "Weekend exclusion requires working-hours boundaries."
+            )
+
+        if start is not None and end is not None:
+
+            start_value = datetime_time.fromisoformat(start)
+            end_value = datetime_time.fromisoformat(end)
+
+            if end_value <= start_value:
+                raise ValueError(
+                    "workday_end_time must be later than workday_start_time."
+                )
+
+        return self
 
 
 # --------------------------------------------------
