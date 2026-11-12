@@ -1,14 +1,12 @@
+
 from datetime import date, datetime, time, timedelta
 from typing import Annotated, Literal
 
 from fastmcp import FastMCP
 from pydantic import Field
+
 from errors.error_handler import handle_tool_errors
 from errors.exceptions import ConfirmationRequiredError
-
-# --------------------------------------------------
-# SERVICES
-# --------------------------------------------------
 
 from services.event_service import (
     create_event,
@@ -17,27 +15,15 @@ from services.event_service import (
     get_event_details,
     postpone_event,
 )
-
-from services.event_search import (
-    search_events,
-    find_similar_events,
-)
-
-from services.calendar_summary import (
-    get_calendar_summary,
-)
-
+from services.event_search import search_events, find_similar_events
+from services.calendar_summary import get_calendar_summary
 from services.availability_service import (
     check_availability,
     get_available_slots,
     find_occurrence_conflicts,
 )
-
 from services.calendar_service import list_calendars
 
-# --------------------------------------------------
-# UTILITIES
-# --------------------------------------------------
 from utils.datetime_utils import (
     parse_datetime,
     parse_date,
@@ -46,15 +32,10 @@ from utils.datetime_utils import (
     get_timezone,
     parse_search_range,
 )
-
 from utils.recurrence_utils import (
     build_recurrence_rule,
     generate_occurrence_windows,
 )
-
-# --------------------------------------------------
-# PYDANTIC SCHEMAS
-# --------------------------------------------------
 
 from schemas.event_schema import (
     CreateEventSchema,
@@ -76,7 +57,6 @@ mcp = FastMCP("Google Calendar MCP", mask_error_details=True)
 # 1. CREATE CALENDAR EVENT
 # ==================================================
 
-
 @mcp.tool()
 @handle_tool_errors
 def create_calendar_event(
@@ -85,7 +65,7 @@ def create_calendar_event(
         Field(
             min_length=1,
             max_length=200,
-            description="Title or subject of the calendar event.",
+            description="Event title. Must contain at least one non-whitespace character and cannot exceed 200 characters.",
         ),
     ],
     start: Annotated[
@@ -93,9 +73,9 @@ def create_calendar_event(
         Field(
             min_length=1,
             description=(
-                "Start date or datetime of the event. "
-                "Use YYYY-MM-DD for all-day events or ISO datetime for timed events. "
-                "Natural expressions such as tomorrow are also supported."
+                "Event start date or datetime. Use YYYY-MM-DD for an all-day event "
+                "or an ISO datetime for a timed event. Supported natural-language "
+                "date expressions are also accepted."
             ),
         ),
     ],
@@ -104,9 +84,10 @@ def create_calendar_event(
         Field(
             default=None,
             description=(
-                "End date or datetime of the event. "
-                "Must use the same event type as start. "
-                "Defaults to one hour after start for timed events."
+                "Event end date or datetime. Must use the same date type as start "
+                "(date for all-day events or datetime for timed events) and must "
+                "occur after start. Optional. Defaults to one hour after start "
+                "for timed events and one calendar day for all-day events."
             ),
         ),
     ] = None,
@@ -115,7 +96,7 @@ def create_calendar_event(
         Field(
             default=None,
             max_length=8192,
-            description="Additional information, agenda, or notes associated with the event.",
+            description="Optional event description, agenda, notes, or additional information. Maximum 8192 characters.",
         ),
     ] = None,
     location: Annotated[
@@ -123,21 +104,21 @@ def create_calendar_event(
         Field(
             default=None,
             max_length=500,
-            description="Physical address, office location, or online meeting location.",
+            description="Optional physical address, venue, office location, or online meeting location. Maximum 500 characters.",
         ),
     ] = None,
     all_day: Annotated[
         bool,
         Field(
             default=False,
-            description="Set True when the event occupies an entire calendar day.",
+            description="Whether the event occupies an entire calendar day. When True, start and end are interpreted as dates rather than timed datetimes.",
         ),
     ] = False,
     recurrence_frequency: Annotated[
         Literal["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] | None,
         Field(
             default=None,
-            description="Recurrence frequency. Supported values: DAILY, WEEKLY, MONTHLY, YEARLY.",
+            description="Recurrence frequency. Supported values: DAILY, WEEKLY, MONTHLY, YEARLY. Leave unset for a one-time event.",
         ),
     ] = None,
     recurrence_interval: Annotated[
@@ -146,14 +127,14 @@ def create_calendar_event(
             default=1,
             ge=1,
             le=365,
-            description="Number of frequency units between recurring events. Requires recurrence_frequency.",
+            description="Interval between recurrence periods. For example, 2 with WEEKLY means every two weeks. Requires recurrence_frequency.",
         ),
     ] = 1,
     recurrence_days: Annotated[
         list[Literal["MO", "TU", "WE", "TH", "FR", "SA", "SU"]] | None,
         Field(
             default=None,
-            description="Weekdays for recurring events using two-letter codes such as MO, TU, WE.",
+            description="Weekdays for a weekly recurrence, using MO, TU, WE, TH, FR, SA, SU. The event start date must fall on one of the selected weekdays.",
         ),
     ] = None,
     recurrence_count: Annotated[
@@ -161,33 +142,23 @@ def create_calendar_event(
         Field(
             default=None,
             gt=0,
-            le = 500,
+            le=500,
             strict=True,
-            description=(
-                "Total number of occurrences, including the first occurrence. "
-                "For example, 21 means 21 events in total. "
-                "Mutually exclusive with recurrence_until."
-            ),
+            description="Total number of occurrences, including the first occurrence. Must be between 1 and 500. Mutually exclusive with recurrence_until and recurrence_indefinite.",
         ),
     ] = None,
     recurrence_until: Annotated[
         str | None,
         Field(
             default=None,
-            description=(
-                "Last occurrence date (inclusive), in YYYY-MM-DD format, "
-                "or an ISO datetime. Mutually exclusive with recurrence_count."
-            ),
+            description="Inclusive final occurrence date or datetime. Use an ISO date for all-day recurrence or an ISO date/datetime for timed recurrence. Mutually exclusive with recurrence_count and recurrence_indefinite.",
         ),
     ] = None,
     recurrence_indefinite: Annotated[
         bool,
         Field(
             default=False,
-            description=(
-                "Set True only when the user explicitly requests "
-                "an unlimited recurring event."
-            ),
+            description="Whether the recurrence has no defined end. Requires recurrence_frequency and must not be combined with recurrence_count or recurrence_until.",
         ),
     ] = False,
     reminder_minutes: Annotated[
@@ -196,69 +167,65 @@ def create_calendar_event(
             default=10,
             ge=0,
             le=40320,
-            description="Number of minutes before the event to trigger a popup reminder.",
+            description="Popup reminder lead time in minutes. Valid range: 0–40320 minutes. Defaults to 10 minutes.",
         ),
     ] = 10,
     allow_conflict: Annotated[
         bool,
         Field(
             default=False,
-            description="Set True to create the event even when its time overlaps existing events.",
+            description="Whether to create the event despite overlaps with existing calendar commitments. Defaults to False; conflicting events are reported without creation.",
         ),
     ] = False,
 ) -> dict:
     """
-    Create a new Google Calendar event, including one-time and recurring events.
+    Create a Google Calendar event or recurring event series.
 
-    WHEN TO USE:
-    - Use for meetings, reminders, workouts, tasks, appointments, and other scheduled activities.
-    - Use this tool once to create an entire recurring series. Never create recurring occurrences individually.
+    INPUTS:
+    - title: Required event title.
+    - start: Required start date or datetime.
+    - end: Optional end date or datetime. Defaults to one hour after
+      the start for timed events, or one day for all-day events.
+    - description and location: Optional event information.
+    - all_day: Selects date-based rather than datetime-based handling.
+    - reminder_minutes: Popup reminder lead time.
+    - allow_conflict: Controls whether overlapping events may be created.
 
-    REQUIRED INPUTS:
-    - title: A meaningful event title.
-    - start: Start date and time of the first occurrence. Must be an unambiguous date/time.
-    - end: End date and time of the first occurrence. Omit when the default event duration is appropriate, if supported by the schema.
-
-    OPTIONAL INPUTS:
-    - description: Additional event information.
-    - location: Event location.
-    - all_day: Whether this is an all-day event.
-    - reminder_minutes: Reminder before the event.
-    - allow_conflict: Whether to permit creation when an occurrence overlaps an existing event.
-
-    RECURRENCE PARAMETERS:
+    RECURRENCE:
     - recurrence_frequency: DAILY, WEEKLY, MONTHLY, or YEARLY.
-    - recurrence_interval: Repeat every N frequency units. For example, 1 means every day; 2 means every two days.
-    - recurrence_days: Weekdays for weekly recurrence, such as ["MO", "WE", "FR"].
-    - recurrence_count: Total number of occurrences, INCLUDING the first occurrence.
-    - recurrence_until: Final recurrence date. Mutually exclusive with recurrence_count.
-    - recurrence_indefinite: Create an ongoing series. Use only when explicitly requested.
+    - recurrence_interval: Number of frequency periods between events.
+    - recurrence_days: Selected weekdays; supported only for WEEKLY.
+    - recurrence_count: Total occurrences, including the first.
+    - recurrence_until: Inclusive final date or datetime.
+    - recurrence_indefinite: Creates an ongoing recurrence.
 
-    RECURRENCE EXAMPLES:
-    - "Every day for 21 days": frequency=DAILY, interval=1, count=21.
-    - "Every Monday and Wednesday for 10 occurrences": frequency=WEEKLY, days=["MO","WE"], count=10.
-    - "Every two weeks until December 31": frequency=WEEKLY, interval=2, until=<final date>.
+    A recurring event must specify exactly one termination option:
+    recurrence_count, recurrence_until, or recurrence_indefinite=True.
+    A one-time event must leave recurrence settings unset/default.
+    The maximum supported occurrence count is 500.
 
-    EXECUTION RULES:
-    1. Resolve relative dates before calling this tool. Use Date-Time MCP only when the requested date/time requires clarification or calculation.
-    2. Validate start, end, timezone, and recurrence parameters.
-    3. For recurring events, validate availability across ALL generated occurrences, not just the first.
-    4. Perform recurrence-wide conflict checking internally. Do not require the agent to call availability separately for every occurrence.
-    5. If conflicts exist and allow_conflict is false, return the conflicting occurrence dates and do not create the event.
-    6. If allow_conflict is true, proceed with creation while reporting the conflicts.
-    7. Create the complete recurrence series using ONE Google Calendar insertion.
-    8. Return the event ID, title, start/end, recurrence details, timezone, and conflict information.
+    BEHAVIOR:
+    - Validates event fields, date types, time ranges, and recurrence settings.
+    - Generates occurrence windows and checks them against calendar busy periods.
+    - Checks all generated occurrences for bounded recurrences.
+    - Indefinite recurrences are checked only within the next 90 days.
+    - If conflicts exist and allow_conflict=False, returns success=False,
+      conflict=True, conflicting_occurrences, and busy_periods.
+      No event is created in this case.
+    - If allow_conflict=True, creates the event despite conflicts.
+    - Creates the complete recurrence series in one calendar insertion.
 
-    IMPORTANT:
-    - Never interpret "for 21 days" as an indefinite recurrence.
-    - Never make separate availability calls for each recurring date.
-    - Do not silently change the user's requested date, time, or recurrence pattern.
+    OUTPUT:
+    - On success: success=True, event, and availability_check.
+    - For bounded recurrences, availability_check reports the number
+      of occurrences checked.
+    - For indefinite recurrences, it reports that the check is limited
+      to a 90-day horizon.
+    - On conflict without permission: success=False and conflict details.
+
+    The event's end must be after its start. All-day event end dates
+    follow exclusive-end semantics internally.
     """
-
-    # Pydantic validation
-    # --------------------------------------------------
-    # 1. VALIDATE INPUT
-    # --------------------------------------------------
 
     payload = CreateEventSchema.model_validate(
         {
@@ -279,39 +246,24 @@ def create_calendar_event(
         }
     )
 
-    # --------------------------------------------------
-    # 2. PARSE EVENT START AND END
-    # --------------------------------------------------
-
     start_value = parse_date_or_datetime(
         payload.start,
         all_day=payload.all_day,
     )
 
     if payload.end:
-
         end_value = parse_date_or_datetime(
             payload.end,
             all_day=payload.all_day,
         )
-
     elif payload.all_day:
-
-        # All-day event ends are exclusive.
         end_value = start_value + timedelta(days=1)
-
     else:
-
         end_value = start_value + timedelta(hours=1)
-
-    # --------------------------------------------------
-    # 3. VALIDATE RECURRENCE START AND TERMINATION
-    # --------------------------------------------------
 
     if payload.recurrence_frequency:
 
         if payload.recurrence_days:
-
             weekday_codes = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
 
             event_date = (
@@ -324,7 +276,6 @@ def create_calendar_event(
             actual_weekday = weekday_codes[event_date.weekday()]
 
             if actual_weekday not in payload.recurrence_days:
-
                 raise ValueError(
                     f"The starting date falls on {actual_weekday}, "
                     f"which is not included in recurrence_days. "
@@ -334,44 +285,32 @@ def create_calendar_event(
         if payload.recurrence_until:
 
             if payload.all_day:
-
                 until_value = date.fromisoformat(payload.recurrence_until)
 
                 if until_value < start_value:
-
                     raise ValueError(
                         "Recurrence end date cannot be before event start."
                     )
 
             else:
-
                 try:
                     until_date = date.fromisoformat(payload.recurrence_until)
-
                     until_datetime = datetime.combine(
                         until_date,
                         time.max,
                         tzinfo=get_timezone(),
                     )
-
                 except ValueError:
-
                     until_datetime = parse_datetime(payload.recurrence_until)
 
                 if until_datetime < start_value:
-
                     raise ValueError(
                         "Recurrence end datetime cannot be before event start."
                     )
 
-    # --------------------------------------------------
-    # 4. BUILD RECURRENCE RULE
-    # --------------------------------------------------
-
     recurrence = None
 
     if payload.recurrence_frequency:
-
         recurrence = build_recurrence_rule(
             frequency=payload.recurrence_frequency,
             interval=payload.recurrence_interval,
@@ -381,10 +320,6 @@ def create_calendar_event(
             all_day=payload.all_day,
         )
 
-    # --------------------------------------------------
-    # 5. GENERATE OCCURRENCE WINDOWS
-    # --------------------------------------------------
-
     occurrences = generate_occurrence_windows(
         start=start_value,
         end=end_value,
@@ -393,12 +328,7 @@ def create_calendar_event(
         indefinite=payload.recurrence_indefinite,
     )
 
-    # --------------------------------------------------
-    # 6. CHECK ALL OCCURRENCES FOR CONFLICTS
-    # --------------------------------------------------
-
     range_start = min(occurrence[0] for occurrence in occurrences)
-
     range_end = max(occurrence[1] for occurrence in occurrences)
 
     availability = check_availability(
@@ -412,7 +342,6 @@ def create_calendar_event(
     )
 
     if occurrence_conflicts and not payload.allow_conflict:
-
         return {
             "success": False,
             "conflict": True,
@@ -424,10 +353,6 @@ def create_calendar_event(
             "conflicting_occurrences": occurrence_conflicts,
             "busy_periods": availability.get("busy_periods", []),
         }
-
-    # --------------------------------------------------
-    # 7. CREATE EVENT
-    # --------------------------------------------------
 
     event = create_event(
         title=payload.title,
@@ -446,7 +371,6 @@ def create_calendar_event(
     }
 
     if payload.recurrence_indefinite:
-
         result["availability_check"] = {
             "complete": False,
             "horizon_days": 90,
@@ -455,9 +379,7 @@ def create_calendar_event(
                 "90 days because this recurrence is indefinite."
             ),
         }
-
     else:
-
         result["availability_check"] = {
             "complete": True,
             "occurrences_checked": len(occurrences),
@@ -470,7 +392,6 @@ def create_calendar_event(
 # 2. EDIT CALENDAR EVENT
 # ==================================================
 
-
 @mcp.tool()
 @handle_tool_errors
 def edit_calendar_event(
@@ -478,36 +399,52 @@ def edit_calendar_event(
         str,
         Field(
             min_length=1,
-            description="Unique Google Calendar event ID identifying the existing event to modify.",
+            description="Unique Google Calendar event identifier. Obtain it from an event search or event details result.",
         ),
     ],
     updates: Annotated[
         dict,
         Field(
+            min_length=1,
             description=(
-                "Dictionary containing fields to modify. "
-                "Supported fields include summary, description, location, start, end, reminders and recurrence. "
-                "Provide only the fields requiring changes."
+                "Non-empty dictionary of fields to update. Supported keys: "
+                "summary, description, location, start, end, reminders, "
+                "recurrence, visibility, transparency. Supply only fields "
+                "that should change. When changing the schedule, provide "
+                "both start and end as Google Calendar event date objects."
             ),
         ),
     ],
 ) -> dict:
     """
-    Modify an existing Google Calendar event using its unique event ID
-    and a dictionary containing the fields to update.
+    Update selected fields of an existing Google Calendar event.
 
-    Supports changes to the event title, description, location, start
-    time, end time, reminders, and recurrence settings.
+    INPUTS:
+    - event_id: Unique identifier of the existing event.
+    - updates: Non-empty dictionary containing one or more supported fields.
 
-    Only provide the fields that need modification. Unspecified fields
-    should remain unchanged.
+    SUPPORTED UPDATE FIELDS:
+    - summary: Event title.
+    - description: Event description.
+    - location: Event location.
+    - start and end: Event date or datetime objects.
+    - reminders: Reminder configuration.
+    - recurrence: Google Calendar recurrence rule.
+    - visibility: Event visibility.
+    - transparency: Availability transparency.
 
-    When changing the event schedule, provide both start and end values.
-    The event must first be identified using its event ID, which can be
-    obtained through event search or event details.
+    BEHAVIOR:
+    - Only supplied fields are modified; other event fields are preserved.
+    - Unsupported update keys are rejected.
+    - At least one update field is required.
+    - Schedule changes require both start and end.
+    - Start and end must use matching date or dateTime representations.
+    - Recurrence updates are validated.
+    - Updates use the event's current ETag to avoid overwriting
+      changes made by another client after retrieval.
 
-    Use this tool when the user requests changes to an existing event
-    rather than creating a new event.
+    OUTPUT:
+    Returns the updated Google Calendar event resource.
     """
 
     payload = UpdateEventSchema.model_validate(
@@ -527,7 +464,6 @@ def edit_calendar_event(
 # 3. DELETE CALENDAR EVENT
 # ==================================================
 
-
 @mcp.tool()
 @handle_tool_errors
 def remove_calendar_event(
@@ -535,14 +471,14 @@ def remove_calendar_event(
         str,
         Field(
             min_length=1,
-            description="Unique Google Calendar event ID identifying the event to delete.",
+            description="Unique Google Calendar event identifier of the event to delete.",
         ),
     ],
     confirmed: Annotated[
         bool,
         Field(
             default=False,
-            description="Explicit user confirmation required before permanently deleting the selected event.",
+            description="Explicit confirmation that deletion is authorized. Must be True for deletion to proceed.",
         ),
     ] = False,
     recurrence_scope: Annotated[
@@ -550,19 +486,36 @@ def remove_calendar_event(
         Field(
             default=None,
             description=(
-                "For recurring master events, use 'series' only when "
-                "the user explicitly confirms deletion of the entire series. "
-                "For an individual occurrence, use 'event'."
+                "Deletion scope for recurring events. Use 'event' to delete "
+                "one recurring occurrence or 'series' to delete the entire "
+                "recurring series. Leave unset for a normal one-time event."
             ),
         ),
     ] = None,
 ) -> dict:
     """
-    Delete an existing Google Calendar event using its unique event ID.
-    Requires explicit user confirmation before deletion. Use event search
-    or event details to identify the correct event before requesting deletion.
-    Already cancelled events are handled without performing another deletion.
-    Returns the deletion status and event identifier.
+    Delete an existing Google Calendar event.
+
+    INPUTS:
+    - event_id: Unique identifier of the event.
+    - confirmed: Must be True before deletion can proceed.
+    - recurrence_scope:
+      - event: Delete one recurring occurrence.
+      - series: Delete the entire recurring series.
+      - None: Normal one-time event.
+
+    BEHAVIOR:
+    - Requires explicit confirmation.
+    - Retrieves the existing event before deletion.
+    - A recurring master event requires recurrence_scope='series'.
+    - A recurring occurrence can be deleted individually.
+    - A non-recurring event cannot use recurrence_scope='series'.
+    - Already-cancelled events are not deleted again.
+    - Uses the event ETag to prevent deleting an event that changed
+      after it was retrieved.
+
+    OUTPUT:
+    Returns the deletion status, event identifier, and status message.
     """
 
     payload = DeleteEventSchema.model_validate({
@@ -571,13 +524,11 @@ def remove_calendar_event(
         "recurrence_scope": recurrence_scope,
     })
 
-    # Confirmation must be checked before calling the service.
     if not payload.confirmed:
         raise ConfirmationRequiredError(
             "Event deletion requires explicit user confirmation."
         )
 
-    # Preserve the ordinary deletion call signature.
     if payload.recurrence_scope is None:
         return delete_event(
             payload.event_id,
@@ -590,10 +541,10 @@ def remove_calendar_event(
         payload.recurrence_scope,
     )
 
+
 # ==================================================
 # 4. GET CALENDAR EVENT
 # ==================================================
-
 
 @mcp.tool()
 @handle_tool_errors
@@ -602,20 +553,24 @@ def get_calendar_event(
         str,
         Field(
             min_length=1,
-            description=(
-                "Unique Google Calendar event ID for retrieving complete event details, "
-                "including title, description, location, start time and end time."
-            ),
+            description="Unique Google Calendar event identifier.",
         ),
     ],
 ) -> dict:
     """
-    Retrieve complete details of a specific Google Calendar event using
-    its unique event ID. Use this tool when the user requests information
-    about an existing event or when additional details are required before
-    editing, postponing or deleting it. Returns available event information,
-    including title, description, location, start and end times, recurrence,
-    reminders and event status.
+    Retrieve the details of one Google Calendar event.
+
+    INPUT:
+    - event_id: Unique identifier of the event.
+
+    BEHAVIOR:
+    Fetches the event resource associated with the supplied identifier.
+    This operation does not modify the event.
+
+    OUTPUT:
+    Returns the available Google Calendar event resource, including
+    fields such as event ID, title, description, location, start,
+    end, recurrence, reminders, attendees, and status when present.
     """
 
     payload = GetEventSchema.model_validate(
@@ -631,7 +586,6 @@ def get_calendar_event(
 # 5. POSTPONE CALENDAR EVENT
 # ==================================================
 
-
 @mcp.tool()
 @handle_tool_errors
 def postpone_calendar_event(
@@ -639,37 +593,44 @@ def postpone_calendar_event(
         str,
         Field(
             min_length=1,
-            description="Unique Google Calendar event ID identifying the existing event to reschedule.",
+            description="Unique Google Calendar event identifier of the event to reschedule.",
         ),
     ],
     new_start: Annotated[
         str,
         Field(
             min_length=1,
-            description=(
-                "New start date or datetime for the postponed event. "
-                "Use YYYY-MM-DD for all-day events or ISO datetime for timed events."
-            ),
+            description="New start date or datetime. Use YYYY-MM-DD for all-day events or an ISO datetime for timed events.",
         ),
     ],
     new_end: Annotated[
         str,
         Field(
             min_length=1,
-            description=(
-                "New end date or datetime for the postponed event. "
-                "Must match the original event type and occur after new_start."
-            ),
+            description="New end date or datetime. Must match the existing event type and occur after new_start.",
         ),
     ],
 ) -> dict:
     """
-    Reschedule an existing Google Calendar event by changing its start
-    and end times while preserving its other event details. Requires the
-    event ID and new start and end values. Supports both timed and all-day
-    events when the supplied values match the original event type.
-    Use this tool when the user wants to postpone or move an existing event.
-    Returns the updated event details.
+    Change the scheduled start and end of an existing calendar event.
+
+    INPUTS:
+    - event_id: Unique identifier of the existing event.
+    - new_start: Replacement start date or datetime.
+    - new_end: Replacement end date or datetime.
+
+    BEHAVIOR:
+    - Retrieves the existing event to determine whether it is all-day
+      or timed.
+    - Parses the supplied values according to the existing event type.
+    - Validates that the new end is after the new start.
+    - Preserves other event information, including title, description,
+      location, reminders, and recurrence settings.
+    - Cancelled events cannot be postponed.
+    - Uses conditional event updating to protect against concurrent changes.
+
+    OUTPUT:
+    Returns the updated Google Calendar event resource.
     """
 
     payload = PostponeEventSchema.model_validate(
@@ -680,8 +641,6 @@ def postpone_calendar_event(
         }
     )
 
-    # The service checks whether the existing event is all-day.
-    # Parse both values here as dates or datetimes based on the existing event.
     existing = get_event_details(payload.event_id)
 
     if "date" in existing.get("start", {}):
@@ -703,7 +662,6 @@ def postpone_calendar_event(
 # 6. SEARCH CALENDAR EVENTS
 # ==================================================
 
-
 @mcp.tool()
 @handle_tool_errors
 def find_calendar_events(
@@ -711,20 +669,14 @@ def find_calendar_events(
         str,
         Field(
             min_length=1,
-            description=(
-                "Beginning of the calendar search range. "
-                "Use an ISO date or datetime string, or a supported natural date expression."
-            ),
+            description="Inclusive beginning of the event search range. Accepts an ISO date, ISO datetime, or supported natural date expression.",
         ),
     ],
     end: Annotated[
         str,
         Field(
             min_length=1,
-            description=(
-                "Ending of the calendar search range. "
-                "Must occur after start and defines the upper boundary of the event search."
-            ),
+            description="End of the event search range. Accepts an ISO date, ISO datetime, or supported natural date expression. Must resolve to a value after start.",
         ),
     ],
     title: Annotated[
@@ -732,20 +684,31 @@ def find_calendar_events(
         Field(
             default=None,
             max_length=200,
-            description=(
-                "Full or partial event title to filter search results. "
-                "Matching is case-insensitive. Leave empty to retrieve all events within the specified range."
-            ),
+            description="Optional full or partial event title filter. Matching is case-insensitive and uses substring matching. Leave unset to retrieve all events in the range.",
         ),
     ] = None,
 ) -> list:
     """
-    Search Google Calendar events within a specified start and end range.
-    An optional title filter can retrieve events matching a full or partial
-    event name. Use this tool when the user asks to find meetings, appointments,
-    scheduled activities or events during a particular period. Without a
-    title filter, all matching events within the requested range are returned.
-    Results include the available Google Calendar event details.
+    Retrieve calendar events within a specified date or datetime range.
+
+    INPUTS:
+    - start: Beginning of the search range.
+    - end: End of the search range.
+    - title: Optional full or partial event title.
+
+    BEHAVIOR:
+    - Accepts ISO date, ISO datetime, and supported natural date expressions.
+    - Date-only end boundaries are treated as inclusive.
+    - Explicit datetime boundaries retain their supplied time values.
+    - If title is supplied, results are filtered using case-insensitive
+      substring matching.
+    - If title is omitted, all matching events in the range are returned.
+    - Results are retrieved in chronological order.
+    - The configured event retrieval limit applies; exceeding it produces
+      an explicit error rather than silently returning incomplete results.
+
+    OUTPUT:
+    Returns a list of matching Google Calendar event resources.
     """
 
     payload = SearchEventsSchema.model_validate(
@@ -772,7 +735,6 @@ def find_calendar_events(
 # 7. FIND SIMILAR CALENDAR EVENTS
 # ==================================================
 
-
 @mcp.tool()
 @handle_tool_errors
 def find_similar_calendar_events(
@@ -781,34 +743,47 @@ def find_similar_calendar_events(
         Field(
             min_length=1,
             max_length=200,
-            description=(
-                "Event title or phrase used to find existing events with similar names. "
-                "Results are ranked by title similarity."
-            ),
+            description="Event title or search phrase used to identify events with similar names. Maximum 200 characters.",
         ),
     ],
     start: Annotated[
         str,
         Field(
             min_length=1,
-            description="Beginning of the date or datetime range for searching similar events.",
+            description="Beginning of the search range. Accepts an ISO date, ISO datetime, or supported natural date expression.",
         ),
     ],
     end: Annotated[
         str,
         Field(
             min_length=1,
-            description="Ending of the date or datetime range. Must occur after start.",
+            description="End of the search range. Accepts an ISO date, ISO datetime, or supported natural date expression.",
         ),
     ],
 ) -> list:
     """
-    Find existing Google Calendar events whose titles closely resemble
-    a supplied search phrase. Searches within the specified date range and
-    calculates title similarity scores to identify potentially matching events.
-    Use this tool when the user remembers only part of an event title or
-    when an exact title search may not find the intended event. Returns
-    matching events ranked by similarity score.
+    Find calendar events with titles similar to a supplied search phrase.
+
+    INPUTS:
+    - title: Required event title or phrase.
+    - start: Beginning of the search range.
+    - end: End of the search range.
+
+    BEHAVIOR:
+    - Retrieves events within the supplied range.
+    - Compares the supplied phrase with each event title using
+      character-sequence similarity.
+    - Uses the configured similarity threshold.
+    - Excludes events without a title.
+    - Orders matching results from highest to lowest similarity.
+    - Search-range validation and event retrieval limits apply.
+
+    OUTPUT:
+    Returns a list of objects containing:
+    - event: Matching Google Calendar event resource.
+    - similarity: Similarity score rounded to three decimal places.
+
+    This is title similarity matching, not semantic or embedding-based search.
     """
 
     payload = SimilarEventsSchema.model_validate(
@@ -835,38 +810,45 @@ def find_similar_calendar_events(
 # 8. GET CALENDAR OVERVIEW
 # ==================================================
 
-
 @mcp.tool()
 @handle_tool_errors
 def get_calendar_overview(
     period: Annotated[
         Literal["day", "week", "month"],
         Field(
-            description=(
-                "Time period for generating the calendar overview. "
-                "Supported values: day, week or month."
-            ),
+            description="Calendar aggregation period. Supported values: day, week, month.",
         ),
     ],
     value: Annotated[
         str | None,
         Field(
             default=None,
-            description=(
-                "Date or period expression used to select the requested overview. "
-                "Examples: tomorrow, next week or November 2026. "
-                "Defaults to the current period when omitted."
-            ),
+            description="Optional date or period expression identifying the requested period. Examples include today, tomorrow, next week, and November 2026. Defaults to the current period.",
         ),
     ] = None,
 ) -> dict:
     """
-    Retrieve a calendar overview for a specific day, week or month.
-    Supports date expressions such as today, tomorrow, next week and
-    specific month names. Provides scheduled event information and
-    aggregated counts for the requested period. Use this tool when the
-    user wants a daily schedule, weekly agenda or monthly event summary.
-    Defaults to the current period when no value is supplied.
+    Generate a calendar overview for a day, week, or month.
+
+    INPUTS:
+    - period: day, week, or month.
+    - value: Optional date or period expression.
+
+    BEHAVIOR:
+    - If value is omitted, the current period is used.
+    - A day overview retrieves events for the selected day.
+    - A week overview groups events by the dates they occupy.
+    - A month overview aggregates event counts by date.
+    - Multi-day events can appear on each date they occupy.
+    - All-day and timed events are handled using their respective
+      date and datetime boundaries.
+
+    OUTPUT:
+    - Day: Selected date, total event count, and event list.
+    - Week: Total event count and events grouped by date.
+    - Month: Total event count and daily event counts.
+
+    Supported period values are limited to day, week, and month.
     """
 
     payload = CalendarOverviewSchema.model_validate(
@@ -886,7 +868,6 @@ def get_calendar_overview(
 # 9. CHECK CALENDAR AVAILABILITY
 # ==================================================
 
-
 @mcp.tool()
 @handle_tool_errors
 def check_calendar_availability(
@@ -894,30 +875,39 @@ def check_calendar_availability(
         str,
         Field(
             min_length=1,
-            description=(
-                "Beginning of the requested availability time slot. "
-                "Provide an ISO datetime containing the desired date and time."
-            ),
+            description="Start of the availability interval. Provide an ISO datetime with a date and time.",
         ),
     ],
     end: Annotated[
         str,
         Field(
             min_length=1,
-            description=(
-                "Ending of the requested availability time slot. "
-                "Must occur after start and defines the period checked for existing calendar conflicts."
-            ),
+            description="End of the availability interval. Provide an ISO datetime with a date and time. Must occur after start.",
         ),
     ],
 ) -> dict:
     """
-    Check whether a requested start and end time is available in the
-    Google Calendar. Queries existing calendar commitments to identify
-    overlapping busy periods. Use this tool before scheduling a meeting
-    or when the user asks whether a particular time slot is free.
-    Returns an availability status and the conflicting time periods
-    when existing events overlap the requested range.
+    Check whether a calendar time interval contains existing commitments.
+
+    INPUTS:
+    - start: Start datetime of the interval.
+    - end: End datetime of the interval.
+
+    BEHAVIOR:
+    - Parses the supplied datetime values.
+    - Requires a valid interval with end after start.
+    - Queries the Google Calendar FreeBusy API.
+    - Returns busy periods that overlap the requested interval.
+    - Does not create, modify, or reserve an event.
+
+    OUTPUT:
+    Returns:
+    - available: True when no busy periods overlap the interval;
+      otherwise False.
+    - busy_periods: List of overlapping busy intervals, each containing
+      start and end timestamps.
+
+    The supplied values should be unambiguous ISO datetimes.
     """
 
     payload = AvailabilitySchema.model_validate(
@@ -937,7 +927,6 @@ def check_calendar_availability(
 # 10. SUGGEST AVAILABLE SLOTS
 # ==================================================
 
-
 @mcp.tool()
 @handle_tool_errors
 def suggest_available_slots(
@@ -945,20 +934,14 @@ def suggest_available_slots(
         str,
         Field(
             min_length=1,
-            description=(
-                "Beginning of the date or datetime range in which available slots should be identified. "
-                "Provide an ISO datetime or supported date expression."
-            ),
+            description="Beginning of the scheduling search range. Accepts an ISO datetime or supported date expression.",
         ),
     ],
     end: Annotated[
         str,
         Field(
             min_length=1,
-            description=(
-                "Ending of the date or datetime range for finding available slots. "
-                "Must occur after start and defines the scheduling window."
-            ),
+            description="End of the scheduling search range. Accepts an ISO datetime or supported date expression and must occur after start.",
         ),
     ],
     duration_minutes: Annotated[
@@ -967,10 +950,7 @@ def suggest_available_slots(
             default=60,
             gt=0,
             le=1440,
-            description=(
-                "Exact duration of each suggested available slot in minutes. "
-                "For example, 60 returns candidate slots lasting exactly one hour."
-            ),
+            description="Exact duration required for each suggested slot, in minutes. Valid range: 1–1440. Defaults to 60 minutes.",
         ),
     ] = 60,
     slot_interval_minutes: Annotated[
@@ -979,7 +959,7 @@ def suggest_available_slots(
             default=15,
             gt=0,
             le=1440,
-            description="Interval between consecutive candidate start times.",
+            description="Time increment between consecutive candidate start times, in minutes. Valid range: 1–1440. Defaults to 15 minutes.",
         ),
     ] = 15,
     max_suggestions: Annotated[
@@ -988,47 +968,60 @@ def suggest_available_slots(
             default=10,
             ge=1,
             le=50,
-            description="Maximum number of slots to return.",
+            description="Maximum number of candidate slots to return. Valid range: 1–50.",
         ),
     ] = 10,
     workday_start_time: Annotated[
         str | None,
         Field(
             default=None,
-            description=(
-                "Daily working-hours start in HH:MM format, "
-                "for example 10:00."
-            ),
+            description="Optional daily working-hours start time in HH:MM format, such as 09:00.",
         ),
     ] = None,
     workday_end_time: Annotated[
         str | None,
         Field(
             default=None,
-            description=(
-                "Daily working-hours end in HH:MM format, "
-                "for example 17:00."
-            ),
+            description="Optional daily working-hours end time in HH:MM format, such as 17:00. Must be later than workday_start_time.",
         ),
     ] = None,
     exclude_weekends: Annotated[
         bool,
         Field(
             default=False,
-            description=(
-                "Skip Saturday and Sunday. "
-                "Requires workday_start_time and workday_end_time."
-            ),
+            description="Whether to exclude Saturdays and Sundays. Requires both workday_start_time and workday_end_time.",
         ),
     ] = False,
 ) -> list:
     """
-    Find available time slots within a specified date and time range.
-    Checks existing calendar commitments and identifies uninterrupted
-    free periods that satisfy the requested minimum duration. Use this
-    tool when the user wants alternative meeting times or asks for
-    available scheduling options. Returns suggested start and end times
-    for each qualifying free period.
+    Find candidate free time slots within a specified scheduling range.
+
+    INPUTS:
+    - start and end: Scheduling search boundaries.
+    - duration_minutes: Required duration of each candidate slot.
+    - slot_interval_minutes: Increment between candidate start times.
+    - max_suggestions: Maximum number of results.
+    - workday_start_time and workday_end_time: Optional daily working hours.
+    - exclude_weekends: Whether Saturdays and Sundays should be skipped.
+
+    BEHAVIOR:
+    - Retrieves busy periods for the requested range.
+    - Subtracts busy intervals to identify uninterrupted free windows.
+    - Generates candidate slots with the exact requested duration.
+    - Candidate start times are generated at the configured interval.
+    - Results are ordered chronologically.
+    - Stops when max_suggestions is reached.
+    - Without working-hour boundaries, the entire supplied range is used.
+    - Working-hour boundaries must be supplied together.
+    - Weekend exclusion requires working-hour boundaries.
+    - Working-hour values must use valid HH:MM format.
+
+    OUTPUT:
+    Returns a list of candidate objects containing:
+    - start: Suggested slot start datetime.
+    - end: Suggested slot end datetime.
+
+    These are availability suggestions only. No event is created or reserved.
     """
 
     payload = AvailableSlotsSchema.model_validate(
@@ -1060,16 +1053,26 @@ def suggest_available_slots(
 # 11. LIST CALENDARS
 # ==================================================
 
-
 @mcp.tool()
 @handle_tool_errors
 def get_calendar_list() -> list:
     """
-    Retrieve the list of Google Calendars accessible to the authenticated
-    user. Provides calendar identifiers, names, primary calendar status
-    and timezone information. Use this tool when the user wants to inspect
-    available calendars or when identifying which calendar is accessible
-    for scheduling operations. Does not create, modify or delete calendars.
+    Retrieve calendars accessible to the authenticated Google account.
+
+    INPUTS:
+    This tool does not require any input parameters.
+
+    BEHAVIOR:
+    - Retrieves the calendars available through the authenticated account.
+    - Does not create, modify, or delete calendars.
+    - Returns selected metadata for each accessible calendar.
+
+    OUTPUT:
+    Returns a list of calendar objects containing:
+    - id: Calendar identifier.
+    - summary: Calendar display name.
+    - primary: Whether this is the primary calendar.
+    - timeZone: Calendar timezone when available.
     """
 
     calendars = list_calendars()
