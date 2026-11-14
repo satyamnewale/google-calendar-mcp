@@ -80,7 +80,12 @@ def test_postpone_all_day_event():
             new_end="2026-11-13",
         )
 
-    assert result["id"] == "event_002"
+    assert result["success"] is True
+    assert result["event"]["id"] == "event_002"
+    assert result["user_visible_range"] == {
+        "start_date": "2026-11-12",
+        "end_date_inclusive": "2026-11-13",
+    }
 
     args = mock_postpone.call_args.args
 
@@ -88,6 +93,7 @@ def test_postpone_all_day_event():
     assert isinstance(args[1], date)
     assert isinstance(args[2], date)
     assert not isinstance(args[1], datetime)
+    assert not isinstance(args[2], datetime)
 
 @pytest.mark.integration
 def test_postpone_event_invalid_id():

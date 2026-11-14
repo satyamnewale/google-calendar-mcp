@@ -617,8 +617,8 @@ class AvailableSlotsSchema(StrictSchema):
         Field(
             min_length=1,
             description=(
-                "Beginning of the date or datetime range "
-                "for available slot discovery."
+                "Start boundary of the availability search. "
+                "Use an ISO 8601 datetime with a timezone offset."
             ),
         ),
     ]
@@ -628,8 +628,10 @@ class AvailableSlotsSchema(StrictSchema):
         Field(
             min_length=1,
             description=(
-                "Ending of the date or datetime range "
-                "for available slot discovery."
+                "Exclusive end boundary of the availability search. "
+                "Use an ISO 8601 datetime with a timezone offset. "
+                "To include a final calendar date, use midnight at the "
+                "start of the following date."
             ),
         ),
     ]
@@ -672,7 +674,7 @@ class AvailableSlotsSchema(StrictSchema):
             default=None,
             description=(
                 "Optional daily working-hours start in HH:MM format, "
-                "for example 10:00."
+                "for example 09:00."
             ),
         ),
     ] = None
@@ -693,8 +695,9 @@ class AvailableSlotsSchema(StrictSchema):
         Field(
             default=False,
             description=(
-                "When True, skip Saturday and Sunday. "
-                "Requires working-hours boundaries."
+                "When True, skip Saturday and Sunday. If working hours "
+                "are omitted, search the full weekday portions of the "
+                "requested range."
             ),
         ),
     ] = False
@@ -742,11 +745,6 @@ class AvailableSlotsSchema(StrictSchema):
         if (start is None) != (end is None):
             raise ValueError(
                 "Provide both workday_start_time and workday_end_time."
-            )
-
-        if self.exclude_weekends and start is None:
-            raise ValueError(
-                "Weekend exclusion requires working-hours boundaries."
             )
 
         if start is not None and end is not None:

@@ -1,6 +1,6 @@
 import asyncio
 import inspect
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
@@ -131,6 +131,10 @@ def test_create_calendar_event_all_day_checks_availability():
     assert result == {
         "success": True,
         "event": expected_event,
+        "user_visible_range": {
+            "start_date": "2026-11-10",
+            "end_date_inclusive": "2026-11-11",
+        },
         "availability_check": {
             "complete": True,
             "occurrences_checked": 1,
@@ -139,7 +143,6 @@ def test_create_calendar_event_all_day_checks_availability():
 
     mock_availability.assert_called_once()
     mock_create.assert_called_once()
-
     assert mock_create.call_args.kwargs["all_day"] is True
 
 
@@ -504,14 +507,14 @@ def test_postpone_all_day_calendar_event():
         },
     }
 
-    expected = {
+    expected_event = {
         "id": "event_002",
         "summary": "Project Submission",
     }
 
     parsed_start = datetime(2026, 11, 12, tzinfo=TZ).date()
-
-    parsed_end = datetime(2026, 11, 13, tzinfo=TZ).date()
+    parsed_end_inclusive = datetime(2026, 11, 13, tzinfo=TZ).date()
+    parsed_end_exclusive = parsed_end_inclusive + timedelta(days=1)
 
     with (
         patch(
@@ -520,11 +523,11 @@ def test_postpone_all_day_calendar_event():
         ),
         patch(
             "server.resolve_date_expression",
-            side_effect=[parsed_start, parsed_end],
+            side_effect=[parsed_start, parsed_end_inclusive],
         ),
         patch(
             "server.postpone_event",
-            return_value=expected,
+            return_value=expected_event,
         ) as mock_postpone,
     ):
         result = server.postpone_calendar_event(
@@ -533,15 +536,21 @@ def test_postpone_all_day_calendar_event():
             new_end="2026-11-13",
         )
 
-    assert result == expected
+    assert result == {
+        "success": True,
+        "event": expected_event,
+        "user_visible_range": {
+            "start_date": "2026-11-12",
+            "end_date_inclusive": "2026-11-13",
+        },
+    }
 
     mock_postpone.assert_called_once_with(
         "event_002",
         parsed_start,
-        parsed_end,
+        parsed_end_exclusive,
         existing_event=existing,
     )
-
 
 # --------------------------------------------------
 # 7. FIND CALENDAR EVENTS
@@ -758,20 +767,13 @@ def test_suggest_available_slots():
         }
     ]
 
-    parsed_start = datetime(2026, 11, 10, 9, 0, tzinfo=TZ)
+    parsed_start = datetime(2026, 11, 10, 10, 0, tzinfo=TZ)
+    parsed_end = datetime(2026, 11, 10, 11, 0, tzinfo=TZ)
 
-    parsed_end = datetime(2026, 11, 10, 17, 0, tzinfo=TZ)
-
-    with (
-        patch(
-            "server.parse_datetime",
-            side_effect=[parsed_start, parsed_end],
-        ),
-        patch(
-            "server.get_available_slots",
-            return_value=expected,
-        ) as mock_slots,
-    ):
+    with patch(
+        "server.get_available_slots",
+        return_value=expected,
+    ) as mock_slots:
         result = server.suggest_available_slots(
             start=START,
             end=END,
@@ -792,7 +794,6 @@ def test_suggest_available_slots():
     )
 
 def test_suggest_available_slots_passes_workday_parameters():
-
     expected = [
         {
             "start": START,
@@ -800,28 +801,20 @@ def test_suggest_available_slots_passes_workday_parameters():
         }
     ]
 
-    parsed_start = datetime(
-        2026, 11, 10, 0, 0, tzinfo=TZ
-    )
+    start = "2026-11-10"
+    end = "2026-11-17"
 
-    parsed_end = datetime(
-        2026, 11, 17, 23, 59, tzinfo=TZ
-    )
+    parsed_start = datetime(2026, 11, 10, 0, 0, tzinfo=TZ)
+    # A date-only end is inclusive, so the tool uses the following midnight.
+    parsed_end = datetime(2026, 11, 18, 0, 0, tzinfo=TZ)
 
-    with (
-        patch(
-            "server.parse_datetime",
-            side_effect=[parsed_start, parsed_end],
-        ),
-        patch(
-            "server.get_available_slots",
-            return_value=expected,
-        ) as mock_slots,
-    ):
-
+    with patch(
+        "server.get_available_slots",
+        return_value=expected,
+    ) as mock_slots:
         result = server.suggest_available_slots(
-            start=START,
-            end=END,
+            start=start,
+            end=end,
             duration_minutes=90,
             slot_interval_minutes=15,
             max_suggestions=3,

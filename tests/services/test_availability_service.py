@@ -419,8 +419,7 @@ def test_slots_never_exceed_workday_end(mock_freebusy):
 
 
 @pytest.mark.services
-def test_weekend_exclusion_requires_working_hours(mock_freebusy):
-
+def test_weekend_exclusion_works_without_working_hours(mock_freebusy):
     start = datetime(
         2026,
         11,
@@ -439,16 +438,26 @@ def test_weekend_exclusion_requires_working_hours(mock_freebusy):
         tzinfo=TZ,
     )
 
-    with pytest.raises(
-        ValueError,
-        match="Weekend exclusion requires working-hours",
-    ):
+    set_busy(mock_freebusy, [])
 
-        availability_service.get_available_slots(
-            start,
-            end,
-            exclude_weekends=True,
-        )
+    slots = availability_service.get_available_slots(
+        start,
+        end,
+        duration_minutes=60,
+        slot_interval_minutes=1440,
+        max_suggestions=50,
+        exclude_weekends=True,
+    )
+
+    slot_dates = [
+        datetime.fromisoformat(slot["start"]).date()
+        for slot in slots
+    ]
+
+    assert len(slot_dates) == 6
+    assert all(day.weekday() < 5 for day in slot_dates)
+
+    mock_freebusy.freebusy.return_value.query.assert_called_once()
 
 
 @pytest.mark.services

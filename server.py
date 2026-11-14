@@ -1,4 +1,3 @@
-
 from datetime import date, datetime, time, timedelta
 from typing import Annotated, Literal
 
@@ -57,6 +56,7 @@ mcp = FastMCP("Google Calendar MCP", mask_error_details=True)
 # 1. CREATE CALENDAR EVENT
 # ==================================================
 
+
 @mcp.tool()
 @handle_tool_errors
 def create_calendar_event(
@@ -65,7 +65,10 @@ def create_calendar_event(
         Field(
             min_length=1,
             max_length=200,
-            description="Event title. Must contain at least one non-whitespace character and cannot exceed 200 characters.",
+            description=(
+                "Event title. Must contain at least one non-whitespace "
+                "character and cannot exceed 200 characters."
+            ),
         ),
     ],
     start: Annotated[
@@ -73,9 +76,9 @@ def create_calendar_event(
         Field(
             min_length=1,
             description=(
-                "Event start date or datetime. Use YYYY-MM-DD for an all-day event "
-                "or an ISO datetime for a timed event. Supported natural-language "
-                "date expressions are also accepted."
+                "Event start date or datetime. Use YYYY-MM-DD for an "
+                "all-day event or an ISO datetime for a timed event. "
+                "Supported natural-language date expressions are also accepted."
             ),
         ),
     ],
@@ -84,10 +87,11 @@ def create_calendar_event(
         Field(
             default=None,
             description=(
-                "Event end date or datetime. Must use the same date type as start "
-                "(date for all-day events or datetime for timed events) and must "
-                "occur after start. Optional. Defaults to one hour after start "
-                "for timed events and one calendar day for all-day events."
+                "End date or datetime. For an all-day event, this is the "
+                "inclusive final date. For a timed event, it is the exact "
+                "end datetime. Must match the type of start. If omitted, "
+                "defaults to one hour for timed events or one day for "
+                "all-day events."
             ),
         ),
     ] = None,
@@ -96,7 +100,7 @@ def create_calendar_event(
         Field(
             default=None,
             max_length=8192,
-            description="Optional event description, agenda, notes, or additional information. Maximum 8192 characters.",
+            description="Optional event description, agenda, or notes.",
         ),
     ] = None,
     location: Annotated[
@@ -104,21 +108,23 @@ def create_calendar_event(
         Field(
             default=None,
             max_length=500,
-            description="Optional physical address, venue, office location, or online meeting location. Maximum 500 characters.",
+            description="Optional physical or online event location.",
         ),
     ] = None,
     all_day: Annotated[
         bool,
         Field(
             default=False,
-            description="Whether the event occupies an entire calendar day. When True, start and end are interpreted as dates rather than timed datetimes.",
+            description=(
+                "True when the event occupies one or more complete " "calendar dates."
+            ),
         ),
     ] = False,
     recurrence_frequency: Annotated[
         Literal["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] | None,
         Field(
             default=None,
-            description="Recurrence frequency. Supported values: DAILY, WEEKLY, MONTHLY, YEARLY. Leave unset for a one-time event.",
+            description=("Recurrence frequency: DAILY, WEEKLY, MONTHLY, or YEARLY."),
         ),
     ] = None,
     recurrence_interval: Annotated[
@@ -127,14 +133,16 @@ def create_calendar_event(
             default=1,
             ge=1,
             le=365,
-            description="Interval between recurrence periods. For example, 2 with WEEKLY means every two weeks. Requires recurrence_frequency.",
+            description="Number of frequency periods between occurrences.",
         ),
     ] = 1,
     recurrence_days: Annotated[
         list[Literal["MO", "TU", "WE", "TH", "FR", "SA", "SU"]] | None,
         Field(
             default=None,
-            description="Weekdays for a weekly recurrence, using MO, TU, WE, TH, FR, SA, SU. The event start date must fall on one of the selected weekdays.",
+            description=(
+                "Weekdays for a weekly recurrence, using MO, TU, WE, " "TH, FR, SA, SU."
+            ),
         ),
     ] = None,
     recurrence_count: Annotated[
@@ -144,21 +152,28 @@ def create_calendar_event(
             gt=0,
             le=500,
             strict=True,
-            description="Total number of occurrences, including the first occurrence. Must be between 1 and 500. Mutually exclusive with recurrence_until and recurrence_indefinite.",
+            description=("Total number of occurrences, including the first."),
         ),
     ] = None,
     recurrence_until: Annotated[
         str | None,
         Field(
             default=None,
-            description="Inclusive final occurrence date or datetime. Use an ISO date for all-day recurrence or an ISO date/datetime for timed recurrence. Mutually exclusive with recurrence_count and recurrence_indefinite.",
+            description=(
+                "Inclusive final recurrence date or datetime. "
+                "Mutually exclusive with recurrence_count and "
+                "recurrence_indefinite."
+            ),
         ),
     ] = None,
     recurrence_indefinite: Annotated[
         bool,
         Field(
             default=False,
-            description="Whether the recurrence has no defined end. Requires recurrence_frequency and must not be combined with recurrence_count or recurrence_until.",
+            description=(
+                "True for an indefinite recurrence. Mutually exclusive "
+                "with recurrence_count and recurrence_until."
+            ),
         ),
     ] = False,
     reminder_minutes: Annotated[
@@ -167,64 +182,25 @@ def create_calendar_event(
             default=10,
             ge=0,
             le=40320,
-            description="Popup reminder lead time in minutes. Valid range: 0–40320 minutes. Defaults to 10 minutes.",
+            description="Popup reminder lead time in minutes.",
         ),
     ] = 10,
     allow_conflict: Annotated[
         bool,
         Field(
             default=False,
-            description="Whether to create the event despite overlaps with existing calendar commitments. Defaults to False; conflicting events are reported without creation.",
+            description=("True to create despite conflicts. Defaults to False."),
         ),
     ] = False,
 ) -> dict:
     """
-    Create a Google Calendar event or recurring event series.
+    Create an event or recurring event series.
 
-    INPUTS:
-    - title: Required event title.
-    - start: Required start date or datetime.
-    - end: Optional end date or datetime. Defaults to one hour after
-      the start for timed events, or one day for all-day events.
-    - description and location: Optional event information.
-    - all_day: Selects date-based rather than datetime-based handling.
-    - reminder_minutes: Popup reminder lead time.
-    - allow_conflict: Controls whether overlapping events may be created.
+    For all-day events, `end` is the inclusive final date. The tool
+    converts it to Google Calendar's exclusive end date internally.
 
-    RECURRENCE:
-    - recurrence_frequency: DAILY, WEEKLY, MONTHLY, or YEARLY.
-    - recurrence_interval: Number of frequency periods between events.
-    - recurrence_days: Selected weekdays; supported only for WEEKLY.
-    - recurrence_count: Total occurrences, including the first.
-    - recurrence_until: Inclusive final date or datetime.
-    - recurrence_indefinite: Creates an ongoing recurrence.
-
-    A recurring event must specify exactly one termination option:
-    recurrence_count, recurrence_until, or recurrence_indefinite=True.
-    A one-time event must leave recurrence settings unset/default.
-    The maximum supported occurrence count is 500.
-
-    BEHAVIOR:
-    - Validates event fields, date types, time ranges, and recurrence settings.
-    - Generates occurrence windows and checks them against calendar busy periods.
-    - Checks all generated occurrences for bounded recurrences.
-    - Indefinite recurrences are checked only within the next 90 days.
-    - If conflicts exist and allow_conflict=False, returns success=False,
-      conflict=True, conflicting_occurrences, and busy_periods.
-      No event is created in this case.
-    - If allow_conflict=True, creates the event despite conflicts.
-    - Creates the complete recurrence series in one calendar insertion.
-
-    OUTPUT:
-    - On success: success=True, event, and availability_check.
-    - For bounded recurrences, availability_check reports the number
-      of occurrences checked.
-    - For indefinite recurrences, it reports that the check is limited
-      to a 90-day horizon.
-    - On conflict without permission: success=False and conflict details.
-
-    The event's end must be after its start. All-day event end dates
-    follow exclusive-end semantics internally.
+    Recurring events must specify exactly one of recurrence_count,
+    recurrence_until, or recurrence_indefinite=True.
     """
 
     payload = CreateEventSchema.model_validate(
@@ -251,62 +227,77 @@ def create_calendar_event(
         all_day=payload.all_day,
     )
 
-    if payload.end:
+    requested_end_inclusive = None
+
+    if payload.all_day:
+
+        if payload.end:
+            requested_end_inclusive = parse_date_or_datetime(
+                payload.end,
+                all_day=True,
+            )
+
+            if requested_end_inclusive < start_value:
+                raise ValueError(
+                    "The inclusive all-day end date cannot be before start."
+                )
+
+            end_value = requested_end_inclusive + timedelta(days=1)
+
+        else:
+            requested_end_inclusive = start_value
+            end_value = start_value + timedelta(days=1)
+
+    elif payload.end:
         end_value = parse_date_or_datetime(
             payload.end,
-            all_day=payload.all_day,
+            all_day=False,
         )
-    elif payload.all_day:
-        end_value = start_value + timedelta(days=1)
+
     else:
         end_value = start_value + timedelta(hours=1)
 
-    if payload.recurrence_frequency:
+    if payload.recurrence_frequency and payload.recurrence_days:
 
-        if payload.recurrence_days:
-            weekday_codes = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
+        weekday_codes = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
 
-            event_date = (
-                start_value
-                if isinstance(start_value, date)
-                and not isinstance(start_value, datetime)
-                else start_value.date()
+        event_date = (
+            start_value
+            if isinstance(start_value, date) and not isinstance(start_value, datetime)
+            else start_value.date()
+        )
+
+        actual_weekday = weekday_codes[event_date.weekday()]
+
+        if actual_weekday not in payload.recurrence_days:
+            raise ValueError(
+                f"The starting date falls on {actual_weekday}, which "
+                "is not included in recurrence_days."
             )
 
-            actual_weekday = weekday_codes[event_date.weekday()]
+    if payload.recurrence_until:
 
-            if actual_weekday not in payload.recurrence_days:
-                raise ValueError(
-                    f"The starting date falls on {actual_weekday}, "
-                    f"which is not included in recurrence_days. "
-                    f"Choose a matching start date or change the weekdays."
+        if payload.all_day:
+            until_value = date.fromisoformat(payload.recurrence_until)
+
+            if until_value < start_value:
+                raise ValueError("Recurrence end date cannot be before event start.")
+
+        else:
+            try:
+                until_date = date.fromisoformat(payload.recurrence_until)
+                until_datetime = datetime.combine(
+                    until_date,
+                    time.max,
+                    tzinfo=get_timezone(),
                 )
+            except ValueError:
+                until_datetime = parse_datetime(payload.recurrence_until)
 
-        if payload.recurrence_until:
-
-            if payload.all_day:
-                until_value = date.fromisoformat(payload.recurrence_until)
-
-                if until_value < start_value:
-                    raise ValueError(
-                        "Recurrence end date cannot be before event start."
-                    )
-
-            else:
-                try:
-                    until_date = date.fromisoformat(payload.recurrence_until)
-                    until_datetime = datetime.combine(
-                        until_date,
-                        time.max,
-                        tzinfo=get_timezone(),
-                    )
-                except ValueError:
-                    until_datetime = parse_datetime(payload.recurrence_until)
-
-                if until_datetime < start_value:
-                    raise ValueError(
-                        "Recurrence end datetime cannot be before event start."
-                    )
+            if until_datetime < start_value:
+                raise ValueError(
+                    "Recurrence end datetime cannot be before event start."
+                )
 
     recurrence = None
 
@@ -328,8 +319,8 @@ def create_calendar_event(
         indefinite=payload.recurrence_indefinite,
     )
 
-    range_start = min(occurrence[0] for occurrence in occurrences)
-    range_end = max(occurrence[1] for occurrence in occurrences)
+    range_start = min(item[0] for item in occurrences)
+    range_end = max(item[1] for item in occurrences)
 
     availability = check_availability(
         range_start,
@@ -341,18 +332,30 @@ def create_calendar_event(
         availability["busy_periods"],
     )
 
+    user_visible_range = None
+
+    if payload.all_day:
+        user_visible_range = {
+            "start_date": start_value.isoformat(),
+            "end_date_inclusive": requested_end_inclusive.isoformat(),
+        }
+
     if occurrence_conflicts and not payload.allow_conflict:
-        return {
+        result = {
             "success": False,
             "conflict": True,
             "message": (
-                "One or more event occurrences overlap "
-                "existing calendar commitments. "
-                "Confirm whether you want to proceed."
+                "One or more event occurrences overlap existing "
+                "calendar commitments. Confirm whether you want to proceed."
             ),
             "conflicting_occurrences": occurrence_conflicts,
             "busy_periods": availability.get("busy_periods", []),
         }
+
+        if user_visible_range is not None:
+            result["user_visible_range"] = user_visible_range
+
+        return result
 
     event = create_event(
         title=payload.title,
@@ -370,13 +373,16 @@ def create_calendar_event(
         "event": event,
     }
 
+    if user_visible_range is not None:
+        result["user_visible_range"] = user_visible_range
+
     if payload.recurrence_indefinite:
         result["availability_check"] = {
             "complete": False,
             "horizon_days": 90,
             "message": (
-                "Conflicts were checked only within the next "
-                "90 days because this recurrence is indefinite."
+                "Conflicts were checked only within the next 90 days "
+                "because this recurrence is indefinite."
             ),
         }
     else:
@@ -391,6 +397,7 @@ def create_calendar_event(
 # ==================================================
 # 2. EDIT CALENDAR EVENT
 # ==================================================
+
 
 @mcp.tool()
 @handle_tool_errors
@@ -464,6 +471,7 @@ def edit_calendar_event(
 # 3. DELETE CALENDAR EVENT
 # ==================================================
 
+
 @mcp.tool()
 @handle_tool_errors
 def remove_calendar_event(
@@ -518,11 +526,13 @@ def remove_calendar_event(
     Returns the deletion status, event identifier, and status message.
     """
 
-    payload = DeleteEventSchema.model_validate({
-        "event_id": event_id,
-        "confirmed": confirmed,
-        "recurrence_scope": recurrence_scope,
-    })
+    payload = DeleteEventSchema.model_validate(
+        {
+            "event_id": event_id,
+            "confirmed": confirmed,
+            "recurrence_scope": recurrence_scope,
+        }
+    )
 
     if not payload.confirmed:
         raise ConfirmationRequiredError(
@@ -545,6 +555,7 @@ def remove_calendar_event(
 # ==================================================
 # 4. GET CALENDAR EVENT
 # ==================================================
+
 
 @mcp.tool()
 @handle_tool_errors
@@ -586,6 +597,7 @@ def get_calendar_event(
 # 5. POSTPONE CALENDAR EVENT
 # ==================================================
 
+
 @mcp.tool()
 @handle_tool_errors
 def postpone_calendar_event(
@@ -593,21 +605,27 @@ def postpone_calendar_event(
         str,
         Field(
             min_length=1,
-            description="Unique Google Calendar event identifier of the event to reschedule.",
+            description="Unique Google Calendar event ID to reschedule.",
         ),
     ],
     new_start: Annotated[
         str,
         Field(
             min_length=1,
-            description="New start date or datetime. Use YYYY-MM-DD for all-day events or an ISO datetime for timed events.",
+            description=(
+                "New start date or datetime. Use a date for an all-day "
+                "event or an ISO datetime for a timed event."
+            ),
         ),
     ],
     new_end: Annotated[
         str,
         Field(
             min_length=1,
-            description="New end date or datetime. Must match the existing event type and occur after new_start.",
+            description=(
+                "For an all-day event, the inclusive final date. For a "
+                "timed event, the exact end datetime."
+            ),
         ),
     ],
 ) -> dict:
@@ -642,25 +660,46 @@ def postpone_calendar_event(
     )
 
     existing = get_event_details(payload.event_id)
+    is_all_day = "date" in existing.get("start", {})
 
-    if "date" in existing.get("start", {}):
+    if is_all_day:
         parsed_start = resolve_date_expression(payload.new_start)
-        parsed_end = resolve_date_expression(payload.new_end)
+        parsed_end_inclusive = resolve_date_expression(payload.new_end)
+
+        if parsed_end_inclusive < parsed_start:
+            raise ValueError("The inclusive all-day end date cannot be before start.")
+
+        parsed_end = parsed_end_inclusive + timedelta(days=1)
+
     else:
         parsed_start = parse_datetime(payload.new_start)
         parsed_end = parse_datetime(payload.new_end)
+        parsed_end_inclusive = None
 
-    return postpone_event(
+    updated_event = postpone_event(
         payload.event_id,
         parsed_start,
         parsed_end,
         existing_event=existing,
     )
 
+    if is_all_day:
+        return {
+            "success": True,
+            "event": updated_event,
+            "user_visible_range": {
+                "start_date": parsed_start.isoformat(),
+                "end_date_inclusive": parsed_end_inclusive.isoformat(),
+            },
+        }
+
+    return updated_event
+
 
 # ==================================================
 # 6. SEARCH CALENDAR EVENTS
 # ==================================================
+
 
 @mcp.tool()
 @handle_tool_errors
@@ -734,6 +773,7 @@ def find_calendar_events(
 # ==================================================
 # 7. FIND SIMILAR CALENDAR EVENTS
 # ==================================================
+
 
 @mcp.tool()
 @handle_tool_errors
@@ -810,6 +850,7 @@ def find_similar_calendar_events(
 # 8. GET CALENDAR OVERVIEW
 # ==================================================
 
+
 @mcp.tool()
 @handle_tool_errors
 def get_calendar_overview(
@@ -867,6 +908,7 @@ def get_calendar_overview(
 # ==================================================
 # 9. CHECK CALENDAR AVAILABILITY
 # ==================================================
+
 
 @mcp.tool()
 @handle_tool_errors
@@ -927,6 +969,7 @@ def check_calendar_availability(
 # 10. SUGGEST AVAILABLE SLOTS
 # ==================================================
 
+
 @mcp.tool()
 @handle_tool_errors
 def suggest_available_slots(
@@ -934,14 +977,17 @@ def suggest_available_slots(
         str,
         Field(
             min_length=1,
-            description="Beginning of the scheduling search range. Accepts an ISO datetime or supported date expression.",
+            description=("Start boundary as an ISO 8601 datetime with timezone."),
         ),
     ],
     end: Annotated[
         str,
         Field(
             min_length=1,
-            description="End of the scheduling search range. Accepts an ISO datetime or supported date expression and must occur after start.",
+            description=(
+                "End of the search range. A date-only end includes that whole day; "
+                "an ISO datetime is an exact boundary."
+            )
         ),
     ],
     duration_minutes: Annotated[
@@ -950,7 +996,7 @@ def suggest_available_slots(
             default=60,
             gt=0,
             le=1440,
-            description="Exact duration required for each suggested slot, in minutes. Valid range: 1–1440. Defaults to 60 minutes.",
+            description="Exact duration of each suggested slot in minutes.",
         ),
     ] = 60,
     slot_interval_minutes: Annotated[
@@ -959,7 +1005,7 @@ def suggest_available_slots(
             default=15,
             gt=0,
             le=1440,
-            description="Time increment between consecutive candidate start times, in minutes. Valid range: 1–1440. Defaults to 15 minutes.",
+            description="Minutes between consecutive candidate start times.",
         ),
     ] = 15,
     max_suggestions: Annotated[
@@ -968,60 +1014,41 @@ def suggest_available_slots(
             default=10,
             ge=1,
             le=50,
-            description="Maximum number of candidate slots to return. Valid range: 1–50.",
+            description="Maximum number of candidate slots to return.",
         ),
     ] = 10,
     workday_start_time: Annotated[
         str | None,
         Field(
             default=None,
-            description="Optional daily working-hours start time in HH:MM format, such as 09:00.",
+            description="Optional daily working-hours start in HH:MM format.",
         ),
     ] = None,
     workday_end_time: Annotated[
         str | None,
         Field(
             default=None,
-            description="Optional daily working-hours end time in HH:MM format, such as 17:00. Must be later than workday_start_time.",
+            description="Optional daily working-hours end in HH:MM format.",
         ),
     ] = None,
     exclude_weekends: Annotated[
         bool,
         Field(
             default=False,
-            description="Whether to exclude Saturdays and Sundays. Requires both workday_start_time and workday_end_time.",
+            description=(
+                "Skip Saturdays and Sundays. Without workday times, "
+                "search the full weekday portions of the requested range."
+            ),
         ),
     ] = False,
 ) -> list:
     """
-    Find candidate free time slots within a specified scheduling range.
+    Find free candidate slots in chronological order.
 
-    INPUTS:
-    - start and end: Scheduling search boundaries.
-    - duration_minutes: Required duration of each candidate slot.
-    - slot_interval_minutes: Increment between candidate start times.
-    - max_suggestions: Maximum number of results.
-    - workday_start_time and workday_end_time: Optional daily working hours.
-    - exclude_weekends: Whether Saturdays and Sundays should be skipped.
-
-    BEHAVIOR:
-    - Retrieves busy periods for the requested range.
-    - Subtracts busy intervals to identify uninterrupted free windows.
-    - Generates candidate slots with the exact requested duration.
-    - Candidate start times are generated at the configured interval.
-    - Results are ordered chronologically.
-    - Stops when max_suggestions is reached.
-    - Without working-hour boundaries, the entire supplied range is used.
-    - Working-hour boundaries must be supplied together.
-    - Weekend exclusion requires working-hour boundaries.
-    - Working-hour values must use valid HH:MM format.
-
-    OUTPUT:
-    Returns a list of candidate objects containing:
-    - start: Suggested slot start datetime.
-    - end: Suggested slot end datetime.
-
-    These are availability suggestions only. No event is created or reserved.
+    Without working-hour boundaries, the full supplied interval is searched.
+    If weekends are excluded without working hours, full weekdays are searched.
+    The end boundary is exclusive. This tool only suggests slots; it does not
+    create or reserve an event.
     """
 
     payload = AvailableSlotsSchema.model_validate(
@@ -1037,9 +1064,14 @@ def suggest_available_slots(
         }
     )
 
+    start_value, end_value = parse_search_range(
+        payload.start,
+        payload.end,
+    )
+
     return get_available_slots(
-        parse_datetime(payload.start),
-        parse_datetime(payload.end),
+        start_value,
+        end_value,
         payload.duration_minutes,
         payload.slot_interval_minutes,
         payload.max_suggestions,
@@ -1052,6 +1084,7 @@ def suggest_available_slots(
 # ==================================================
 # 11. LIST CALENDARS
 # ==================================================
+
 
 @mcp.tool()
 @handle_tool_errors
