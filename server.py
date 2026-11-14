@@ -89,9 +89,7 @@ def create_calendar_event(
             description=(
                 "End date or datetime. For an all-day event, this is the "
                 "inclusive final date. For a timed event, it is the exact "
-                "end datetime. Must match the type of start. If omitted, "
-                "defaults to one hour for timed events or one day for "
-                "all-day events."
+                "end datetime. Must match the type of start."
             ),
         ),
     ] = None,
@@ -194,13 +192,38 @@ def create_calendar_event(
     ] = False,
 ) -> dict:
     """
-    Create an event or recurring event series.
+Create a Google Calendar event or recurring event series.
 
-    For all-day events, `end` is the inclusive final date. The tool
-    converts it to Google Calendar's exclusive end date internally.
+WHEN TO USE:
+- "Schedule a project meeting tomorrow at 5 PM."
+- "Create a recurring weekly meeting."
+- When a confirmed scheduling request needs execution.
 
-    Recurring events must specify exactly one of recurrence_count,
-    recurrence_until, or recurrence_indefinite=True.
+INPUT:
+- title: Event title.
+- start and end: Event date/time.
+- Optional description, location and timezone.
+- Optional all-day, recurrence and reminder settings.
+- Optional conflict handling.
+
+WORKING:
+- Validates event information.
+- Constructs the Google Calendar event.
+- Applies reminders and recurrence settings.
+- Submits the event to Google Calendar.
+
+OUTPUT:
+- Creation status.
+- Event ID.
+- Event title.
+- Start and end.
+- Event details.
+
+IMPORTANT:
+- Use an explicit IANA timezone for timed events.
+- All-day events use date boundaries.
+- Check availability when appropriate.
+- Never claim success without a successful API result.
     """
 
     payload = CreateEventSchema.model_validate(
@@ -416,42 +439,40 @@ def edit_calendar_event(
             description=(
                 "Non-empty dictionary of fields to update. Supported keys: "
                 "summary, description, location, start, end, reminders, "
-                "recurrence, visibility, transparency. Supply only fields "
-                "that should change. When changing the schedule, provide "
-                "both start and end as Google Calendar event date objects."
+                "recurrence, visibility, transparency."
             ),
         ),
     ],
 ) -> dict:
     """
-    Update selected fields of an existing Google Calendar event.
+Update selected properties of an existing Google Calendar event.
 
-    INPUTS:
-    - event_id: Unique identifier of the existing event.
-    - updates: Non-empty dictionary containing one or more supported fields.
+WHEN TO USE:
+- "Change tomorrow's meeting location."
+- "Rename the project discussion event."
+- "Move the meeting to 6 PM."
 
-    SUPPORTED UPDATE FIELDS:
-    - summary: Event title.
-    - description: Event description.
-    - location: Event location.
-    - start and end: Event date or datetime objects.
-    - reminders: Reminder configuration.
-    - recurrence: Google Calendar recurrence rule.
-    - visibility: Event visibility.
-    - transparency: Availability transparency.
+INPUT:
+- event_id: Existing Google Calendar event ID.
+- updates: Dictionary containing supported fields.
+- Schedule changes require both start and end.
 
-    BEHAVIOR:
-    - Only supplied fields are modified; other event fields are preserved.
-    - Unsupported update keys are rejected.
-    - At least one update field is required.
-    - Schedule changes require both start and end.
-    - Start and end must use matching date or dateTime representations.
-    - Recurrence updates are validated.
-    - Updates use the event's current ETag to avoid overwriting
-      changes made by another client after retrieval.
+WORKING:
+- Retrieves the existing event.
+- Validates requested changes.
+- Applies only supplied updates.
+- Protects against concurrent modifications using event version information.
 
-    OUTPUT:
-    Returns the updated Google Calendar event resource.
+OUTPUT:
+- Updated event details.
+- Event ID.
+- Updated fields.
+- Operation status.
+
+IMPORTANT:
+- Do not replace unspecified fields.
+- Validate timezone when changing event times.
+- Use get_calendar_event when event details are unknown.
     """
 
     payload = UpdateEventSchema.model_validate(
@@ -502,28 +523,33 @@ def remove_calendar_event(
     ] = None,
 ) -> dict:
     """
-    Delete an existing Google Calendar event.
+Delete an existing Google Calendar event or recurring event occurrence.
 
-    INPUTS:
-    - event_id: Unique identifier of the event.
-    - confirmed: Must be True before deletion can proceed.
-    - recurrence_scope:
-      - event: Delete one recurring occurrence.
-      - series: Delete the entire recurring series.
-      - None: Normal one-time event.
+WHEN TO USE:
+- "Delete tomorrow's project meeting."
+- "Remove the entire recurring meeting series."
+- When the user explicitly requests event deletion.
 
-    BEHAVIOR:
-    - Requires explicit confirmation.
-    - Retrieves the existing event before deletion.
-    - A recurring master event requires recurrence_scope='series'.
-    - A recurring occurrence can be deleted individually.
-    - A non-recurring event cannot use recurrence_scope='series'.
-    - Already-cancelled events are not deleted again.
-    - Uses the event ETag to prevent deleting an event that changed
-      after it was retrieved.
+INPUT:
+- event_id: Existing event ID.
+- confirmed: Explicit deletion confirmation.
+- recurrence_scope: Optional event or series selection.
 
-    OUTPUT:
-    Returns the deletion status, event identifier, and status message.
+WORKING:
+- Validates confirmation.
+- Retrieves the existing event.
+- Determines the requested deletion scope.
+- Executes the Google Calendar deletion.
+
+OUTPUT:
+- Deletion status.
+- Event ID.
+- Deleted event information.
+
+IMPORTANT:
+- Requires confirmed=True.
+- Recurring events require an explicit deletion scope.
+- Never infer confirmation from unrelated conversation history.
     """
 
     payload = DeleteEventSchema.model_validate(
@@ -569,19 +595,32 @@ def get_calendar_event(
     ],
 ) -> dict:
     """
-    Retrieve the details of one Google Calendar event.
+Retrieve complete available details of one Google Calendar event.
 
-    INPUT:
-    - event_id: Unique identifier of the event.
+WHEN TO USE:
+- "Show me the details of my project meeting."
+- "What time is my next meeting?"
+- Before editing, postponing or deleting an event.
 
-    BEHAVIOR:
-    Fetches the event resource associated with the supplied identifier.
-    This operation does not modify the event.
+INPUT:
+- event_id: Google Calendar event identifier.
 
-    OUTPUT:
-    Returns the available Google Calendar event resource, including
-    fields such as event ID, title, description, location, start,
-    end, recurrence, reminders, attendees, and status when present.
+WORKING:
+- Retrieves the specified event.
+- Extracts its available properties.
+- Returns the event without modifying it.
+
+OUTPUT:
+- Event ID and title.
+- Description and location.
+- Start and end.
+- Timezone and recurrence.
+- Attendees, reminders and status.
+
+IMPORTANT:
+- Requires a valid event ID.
+- Does not modify or delete events.
+- Use find_calendar_events when the event ID is unknown.
     """
 
     payload = GetEventSchema.model_validate(
@@ -630,25 +669,35 @@ def postpone_calendar_event(
     ],
 ) -> dict:
     """
-    Change the scheduled start and end of an existing calendar event.
+Reschedule an existing Google Calendar event to a new date or time.
 
-    INPUTS:
-    - event_id: Unique identifier of the existing event.
-    - new_start: Replacement start date or datetime.
-    - new_end: Replacement end date or datetime.
+WHEN TO USE:
+- "Move tomorrow's meeting to Friday."
+- "Postpone the project meeting by two hours."
+- When the user wants to change an existing event's schedule.
 
-    BEHAVIOR:
-    - Retrieves the existing event to determine whether it is all-day
-      or timed.
-    - Parses the supplied values according to the existing event type.
-    - Validates that the new end is after the new start.
-    - Preserves other event information, including title, description,
-      location, reminders, and recurrence settings.
-    - Cancelled events cannot be postponed.
-    - Uses conditional event updating to protect against concurrent changes.
+INPUT:
+- event_id: Existing event ID.
+- new_start: Requested new start.
+- new_end: Requested new end.
 
-    OUTPUT:
-    Returns the updated Google Calendar event resource.
+WORKING:
+- Retrieves the existing event.
+- Identifies its event type.
+- Validates the new schedule.
+- Updates the event while preserving other properties.
+
+OUTPUT:
+- Updated event ID.
+- New start and end.
+- Updated event details.
+- Operation status.
+
+IMPORTANT:
+- Requires a valid event ID.
+- Start must precede end.
+- Preserve the intended event timezone.
+- Use edit_calendar_event for general property changes.
     """
 
     payload = PostponeEventSchema.model_validate(
@@ -728,26 +777,35 @@ def find_calendar_events(
     ] = None,
 ) -> list:
     """
-    Retrieve calendar events within a specified date or datetime range.
+Search Google Calendar events within a specified date or datetime range.
 
-    INPUTS:
-    - start: Beginning of the search range.
-    - end: End of the search range.
-    - title: Optional full or partial event title.
+WHEN TO USE:
+- "Show my meetings tomorrow."
+- "Find all project meetings this week."
+- "Find events containing the word discussion."
 
-    BEHAVIOR:
-    - Accepts ISO date, ISO datetime, and supported natural date expressions.
-    - Date-only end boundaries are treated as inclusive.
-    - Explicit datetime boundaries retain their supplied time values.
-    - If title is supplied, results are filtered using case-insensitive
-      substring matching.
-    - If title is omitted, all matching events in the range are returned.
-    - Results are retrieved in chronological order.
-    - The configured event retrieval limit applies; exceeding it produces
-      an explicit error rather than silently returning incomplete results.
+INPUT:
+- start: Search range beginning.
+- end: Search range ending.
+- title: Optional partial title filter.
 
-    OUTPUT:
-    Returns a list of matching Google Calendar event resources.
+WORKING:
+- Validates search boundaries.
+- Retrieves events within the requested range.
+- Applies title filtering when supplied.
+- Orders results chronologically.
+
+OUTPUT:
+- Matching event IDs.
+- Titles and descriptions.
+- Start and end.
+- Locations and other available metadata.
+
+IMPORTANT:
+- Date-only end boundaries are inclusive.
+- Specify timezone when interpreting local datetime boundaries.
+- Retrieval limits apply.
+- Use get_calendar_event for complete details of one event.
     """
 
     payload = SearchEventsSchema.model_validate(
@@ -802,28 +860,33 @@ def find_similar_calendar_events(
     ],
 ) -> list:
     """
-    Find calendar events with titles similar to a supplied search phrase.
+Find calendar events with titles similar to a supplied phrase.
 
-    INPUTS:
-    - title: Required event title or phrase.
-    - start: Beginning of the search range.
-    - end: End of the search range.
+WHEN TO USE:
+- "Find meetings similar to project discussion."
+- "Look for events related to the product review."
+- When the exact event title is unknown.
 
-    BEHAVIOR:
-    - Retrieves events within the supplied range.
-    - Compares the supplied phrase with each event title using
-      character-sequence similarity.
-    - Uses the configured similarity threshold.
-    - Excludes events without a title.
-    - Orders matching results from highest to lowest similarity.
-    - Search-range validation and event retrieval limits apply.
+INPUT:
+- title: Search phrase.
+- start: Search range beginning.
+- end: Search range ending.
 
-    OUTPUT:
-    Returns a list of objects containing:
-    - event: Matching Google Calendar event resource.
-    - similarity: Similarity score rounded to three decimal places.
+WORKING:
+- Retrieves events within the specified range.
+- Compares event titles using character-sequence similarity.
+- Ranks matching events by similarity.
 
-    This is title similarity matching, not semantic or embedding-based search.
+OUTPUT:
+- Matching event details.
+- Event IDs.
+- Similarity scores.
+- Chronologically relevant information.
+
+IMPORTANT:
+- Uses string similarity, not semantic search.
+- Search range and retrieval limits apply.
+- Use get_calendar_event to inspect a selected result.
     """
 
     payload = SimilarEventsSchema.model_validate(
@@ -869,27 +932,34 @@ def get_calendar_overview(
     ] = None,
 ) -> dict:
     """
-    Generate a calendar overview for a day, week, or month.
+Generate a calendar overview for a specified day, week, or month.
 
-    INPUTS:
-    - period: day, week, or month.
-    - value: Optional date or period expression.
+WHEN TO USE:
+- "Show my calendar for today."
+- "Give me this week's schedule."
+- "How many meetings do I have this month?"
 
-    BEHAVIOR:
-    - If value is omitted, the current period is used.
-    - A day overview retrieves events for the selected day.
-    - A week overview groups events by the dates they occupy.
-    - A month overview aggregates event counts by date.
-    - Multi-day events can appear on each date they occupy.
-    - All-day and timed events are handled using their respective
-      date and datetime boundaries.
+INPUT:
+- period: Day, week, or month.
+- value: Optional date or period expression.
+- timezone: Optional timezone if supported by the implementation.
 
-    OUTPUT:
-    - Day: Selected date, total event count, and event list.
-    - Week: Total event count and events grouped by date.
-    - Month: Total event count and daily event counts.
+WORKING:
+- Determines the requested calendar period.
+- Retrieves relevant calendar events.
+- Organizes results according to the selected period.
+- Calculates daily event counts where applicable.
 
-    Supported period values are limited to day, week, and month.
+OUTPUT:
+- Period boundaries.
+- Event details.
+- Daily event groups.
+- Event counts.
+
+IMPORTANT:
+- Defaults to the current period when value is omitted.
+- Multi-day events can occupy multiple calendar dates.
+- Use find_calendar_events for custom date ranges.
     """
 
     payload = CalendarOverviewSchema.model_validate(
@@ -929,27 +999,34 @@ def check_calendar_availability(
     ],
 ) -> dict:
     """
-    Check whether a calendar time interval contains existing commitments.
+Check whether a specified calendar interval contains existing commitments.
 
-    INPUTS:
-    - start: Start datetime of the interval.
-    - end: End datetime of the interval.
+WHEN TO USE:
+- "Am I free tomorrow at 5 PM?"
+- "Check whether Friday afternoon is available."
+- Before creating a meeting where conflicts matter.
 
-    BEHAVIOR:
-    - Parses the supplied datetime values.
-    - Requires a valid interval with end after start.
-    - Queries the Google Calendar FreeBusy API.
-    - Returns busy periods that overlap the requested interval.
-    - Does not create, modify, or reserve an event.
+INPUT:
+- start: Requested interval beginning.
+- end: Requested interval ending.
 
-    OUTPUT:
-    Returns:
-    - available: True when no busy periods overlap the interval;
-      otherwise False.
-    - busy_periods: List of overlapping busy intervals, each containing
-      start and end timestamps.
+WORKING:
+- Validates the requested interval.
+- Queries Google Calendar FreeBusy.
+- Identifies overlapping busy periods.
+- Determines whether the interval is available.
 
-    The supplied values should be unambiguous ISO datetimes.
+OUTPUT:
+- Availability status.
+- Busy intervals.
+- Requested start and end.
+- Relevant calendar information.
+
+IMPORTANT:
+- End must be after start.
+- Use unambiguous timezone-aware datetimes.
+- This tool checks availability only.
+- It does not create or reserve an event.
     """
 
     payload = AvailabilitySchema.model_validate(
@@ -1043,12 +1120,35 @@ def suggest_available_slots(
     ] = False,
 ) -> list:
     """
-    Find free candidate slots in chronological order.
+Find available meeting slots within a specified date or datetime range.
 
-    Without working-hour boundaries, the full supplied interval is searched.
-    If weekends are excluded without working hours, full weekdays are searched.
-    The end boundary is exclusive. This tool only suggests slots; it does not
-    create or reserve an event.
+WHEN TO USE:
+- "Find three available slots next week."
+- "Suggest a one-hour meeting during working hours."
+- When scheduling requires alternative time suggestions.
+
+INPUT:
+- start and end: Search boundaries.
+- duration: Optional meeting duration.
+- slot_interval: Optional interval between candidates.
+- max_suggestions: Maximum number of suggestions.
+- Optional working hours and weekend settings.
+
+WORKING:
+- Retrieves existing busy periods.
+- Evaluates candidate time intervals.
+- Applies working-hour and weekend restrictions.
+- Returns suitable free slots.
+
+OUTPUT:
+- Suggested start and end times.
+- Number of available suggestions.
+- Relevant timezone information.
+
+IMPORTANT:
+- Suggestions are not reservations.
+- End boundary is exclusive.
+- Confirm availability again before creating an event.
     """
 
     payload = AvailableSlotsSchema.model_validate(
@@ -1090,22 +1190,31 @@ def suggest_available_slots(
 @handle_tool_errors
 def get_calendar_list() -> list:
     """
-    Retrieve calendars accessible to the authenticated Google account.
+Retrieve calendars accessible through the authenticated Google account.
 
-    INPUTS:
-    This tool does not require any input parameters.
+WHEN TO USE:
+- "Show my available calendars."
+- "Which calendar should I use for this meeting?"
+- When identifying a calendar before scheduling.
 
-    BEHAVIOR:
-    - Retrieves the calendars available through the authenticated account.
-    - Does not create, modify, or delete calendars.
-    - Returns selected metadata for each accessible calendar.
+INPUT:
+- No required input.
 
-    OUTPUT:
-    Returns a list of calendar objects containing:
-    - id: Calendar identifier.
-    - summary: Calendar display name.
-    - primary: Whether this is the primary calendar.
-    - timeZone: Calendar timezone when available.
+WORKING:
+- Queries the authenticated Google Calendar account.
+- Retrieves accessible calendar metadata.
+- Identifies the primary calendar where available.
+
+OUTPUT:
+- Calendar IDs.
+- Display names.
+- Primary-calendar status.
+- Timezone information when available.
+
+IMPORTANT:
+- Requires valid Google Calendar authentication.
+- Does not create, update or delete calendars.
+- Use the returned calendar ID when a tool supports calendar selection.
     """
 
     calendars = list_calendars()
