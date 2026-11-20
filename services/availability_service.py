@@ -3,21 +3,24 @@ from datetime import datetime, timedelta, time as datetime_time
 from auth.google_auth import get_calendar_service
 from config.settings import CALENDAR_ID, TIMEZONE
 
+from services.calendar_service import _execute
+import asyncio
+from errors.exceptions import CalendarFreeBusyError
+
 from utils.datetime_utils import to_rfc3339
 from utils.validators import (
     validate_event_time,
     validate_time_range,
 )
 
-
-def check_availability(
+async def check_availability(
     start_date: datetime,
     end_date: datetime,
     calendar_id: str = CALENDAR_ID,
 ):
     validate_time_range(start_date, end_date)
 
-    service = get_calendar_service()
+    service = await asyncio.to_thread(get_calendar_service)
 
     body = {
         "timeMin": to_rfc3339(start_date),
@@ -26,13 +29,21 @@ def check_availability(
         "items": [{"id": calendar_id}],
     }
 
-    response = service.freebusy().query(body=body).execute()
+    response = await _execute(
+        service.freebusy().query(body=body)
+    )
 
-    calendar_data = response.get("calendars", {}).get(calendar_id, {})
+    calendar_data = (
+        response.get("calendars", {}).get(calendar_id, {})
+    )
+
     errors = calendar_data.get("errors", [])
 
     if errors:
-        raise RuntimeError(f"Google FreeBusy API returned errors: {errors}")
+        raise CalendarFreeBusyError(
+            "Google Calendar could not retrieve availability "
+            "for the requested calendar."
+        )
 
     busy_periods = calendar_data.get("busy", [])
 
@@ -41,12 +52,11 @@ def check_availability(
         "busy_periods": busy_periods,
     }
 
-
-def find_conflicts(
+async def find_conflicts(
     start_date: datetime,
     end_date: datetime,
 ):
-    result = check_availability(start_date, end_date)
+    result = await check_availability(start_date, end_date)
     return result["busy_periods"]
 
 
@@ -55,8 +65,6 @@ def _free_windows_for_period(
     window_end: datetime,
     busy_periods: list[tuple[datetime, datetime]],
 ) -> list[tuple[datetime, datetime]]:
-    """Subtract busy intervals and return free windows in time order."""
-
     free_windows = []
     cursor = window_start
 
@@ -70,10 +78,7 @@ def _free_windows_for_period(
 
         if busy_start > cursor:
             free_windows.append(
-                (
-                    cursor,
-                    min(busy_start, window_end),
-                )
+                (cursor, min(busy_start, window_end))
             )
 
         cursor = max(cursor, busy_end)
@@ -82,12 +87,7 @@ def _free_windows_for_period(
             break
 
     if cursor < window_end:
-        free_windows.append(
-            (
-                cursor,
-                window_end,
-            )
-        )
+        free_windows.append((cursor, window_end))
 
     return free_windows
 
@@ -100,13 +100,6 @@ def _build_search_windows(
     workday_end: datetime_time | None,
     exclude_weekends: bool,
 ) -> list[tuple[datetime, datetime]]:
-    """
-    Build search windows, clipped to the requested range.
-
-    With no working hours and no weekend exclusion, search the full
-    supplied interval. With weekend exclusion, split it by local date
-    so weekend dates can be skipped without requiring business hours.
-    """
 
     if workday_start is None and not exclude_weekends:
         return [(start_date, end_date)]
@@ -122,8 +115,6 @@ def _build_search_windows(
             continue
 
         if workday_start is None:
-            # Full local calendar day. Construct the next midnight
-            # separately so this also handles timezone transitions.
             daily_start = datetime.combine(
                 current_day,
                 datetime_time.min,
@@ -157,7 +148,7 @@ def _build_search_windows(
     return windows
 
 
-def get_available_slots(
+async def get_available_slots(
     start_date: datetime,
     end_date: datetime,
     duration_minutes: int = 60,
@@ -167,52 +158,56 @@ def get_available_slots(
     workday_end_time: str | None = None,
     exclude_weekends: bool = False,
 ):
-    """
-    Generate exact-duration free slots in chronological order.
-
-    The end boundary is exclusive. When weekend exclusion is enabled
-    without working hours, the full weekday portions of the interval
-    are searched.
-    """
-
     validate_time_range(start_date, end_date)
 
     if start_date.tzinfo is None or end_date.tzinfo is None:
-        raise ValueError("Start and end datetimes must include timezone information.")
+        raise ValueError(
+            "Start and end datetimes must include timezone information."
+        )
 
     if (
         isinstance(duration_minutes, bool)
         or not isinstance(duration_minutes, int)
         or not 1 <= duration_minutes <= 1440
     ):
-        raise ValueError("Duration must be an integer between 1 and 1440 minutes.")
+        raise ValueError(
+            "Duration must be an integer between 1 and 1440 minutes."
+        )
 
     if (
         isinstance(slot_interval_minutes, bool)
         or not isinstance(slot_interval_minutes, int)
         or not 1 <= slot_interval_minutes <= 1440
     ):
-        raise ValueError("Slot interval must be an integer between 1 and 1440 minutes.")
+        raise ValueError(
+            "Slot interval must be an integer between 1 and 1440 minutes."
+        )
 
     if (
         isinstance(max_suggestions, bool)
         or not isinstance(max_suggestions, int)
         or not 1 <= max_suggestions <= 50
     ):
-        raise ValueError("Maximum suggestions must be an integer between 1 and 50.")
+        raise ValueError(
+            "Maximum suggestions must be an integer between 1 and 50."
+        )
 
     if (workday_start_time is None) != (workday_end_time is None):
-        raise ValueError("Provide both workday_start_time and workday_end_time.")
+        raise ValueError(
+            "Provide both workday_start_time and workday_end_time."
+        )
 
     workday_start = None
     workday_end = None
 
     if workday_start_time is not None:
-
         try:
-            workday_start = datetime_time.fromisoformat(workday_start_time)
-            workday_end = datetime_time.fromisoformat(workday_end_time)
-
+            workday_start = datetime_time.fromisoformat(
+                workday_start_time
+            )
+            workday_end = datetime_time.fromisoformat(
+                workday_end_time
+            )
         except (TypeError, ValueError) as exc:
             raise ValueError(
                 "Working-hours times must use valid HH:MM values."
@@ -226,19 +221,30 @@ def get_available_slots(
             or workday_start.tzinfo is not None
             or workday_end.tzinfo is not None
         ):
-            raise ValueError("Working-hours times must use HH:MM format.")
+            raise ValueError(
+                "Working-hours times must use HH:MM format."
+            )
 
         if workday_end <= workday_start:
-            raise ValueError("Working-hours end must be later than start.")
+            raise ValueError(
+                "Working-hours end must be later than start."
+            )
 
-    busy_periods = find_conflicts(start_date, end_date)
+    busy_periods = await find_conflicts(
+        start_date,
+        end_date,
+    )
+
     timezone = start_date.tzinfo
     busy = []
 
     for period in busy_periods:
-
-        busy_start = datetime.fromisoformat(period["start"].replace("Z", "+00:00"))
-        busy_end = datetime.fromisoformat(period["end"].replace("Z", "+00:00"))
+        busy_start = datetime.fromisoformat(
+            period["start"].replace("Z", "+00:00")
+        )
+        busy_end = datetime.fromisoformat(
+            period["end"].replace("Z", "+00:00")
+        )
 
         if busy_start.tzinfo is None:
             busy_start = busy_start.replace(tzinfo=timezone)
@@ -289,12 +295,10 @@ def get_available_slots(
 
                 candidate_end = candidate_start + duration
 
-                slots.append(
-                    {
-                        "start": candidate_start.isoformat(),
-                        "end": candidate_end.isoformat(),
-                    }
-                )
+                slots.append({
+                    "start": candidate_start.isoformat(),
+                    "end": candidate_end.isoformat(),
+                })
 
                 if len(slots) >= max_suggestions:
                     return slots
@@ -308,15 +312,6 @@ def find_occurrence_conflicts(
     occurrences: list[tuple[datetime, datetime]],
     busy_periods: list[dict],
 ) -> list[dict]:
-    """
-    Compare event occurrences against busy periods.
-
-    Two intervals overlap when:
-
-        occurrence_start < busy_end
-        and
-        occurrence_end > busy_start
-    """
 
     conflicts = []
 
@@ -327,20 +322,23 @@ def find_occurrence_conflicts(
             busy_start = datetime.fromisoformat(
                 busy_period["start"].replace("Z", "+00:00")
             )
-            busy_end = datetime.fromisoformat(busy_period["end"].replace("Z", "+00:00"))
+            busy_end = datetime.fromisoformat(
+                busy_period["end"].replace("Z", "+00:00")
+            )
 
-            if occurrence_start < busy_end and occurrence_end > busy_start:
-                conflicts.append(
-                    {
-                        "occurrence": {
-                            "start": occurrence_start.isoformat(),
-                            "end": occurrence_end.isoformat(),
-                        },
-                        "existing_event": {
-                            "start": busy_start.isoformat(),
-                            "end": busy_end.isoformat(),
-                        },
-                    }
-                )
+            if (
+                occurrence_start < busy_end
+                and occurrence_end > busy_start
+            ):
+                conflicts.append({
+                    "occurrence": {
+                        "start": occurrence_start.isoformat(),
+                        "end": occurrence_end.isoformat(),
+                    },
+                    "existing_event": {
+                        "start": busy_start.isoformat(),
+                        "end": busy_end.isoformat(),
+                    },
+                })
 
     return conflicts

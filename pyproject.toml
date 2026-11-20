@@ -18,12 +18,17 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-mock",
+    "pytest-asyncio",
 ]
+
 
 [tool.pytest.ini_options]
 minversion = "8.0"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 testpaths = ["tests"]
+pythonpath = ["."]
 
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
@@ -40,3 +45,4 @@ markers = [
     "integration: Integration tests",
     "services: Service-layer tests",
 ]
+

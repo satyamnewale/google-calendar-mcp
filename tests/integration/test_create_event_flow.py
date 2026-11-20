@@ -1,10 +1,11 @@
 
-from datetime import date, timedelta
+from datetime import timedelta
+from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
-from unittest.mock import patch
 
 import pytest
 from fastmcp.exceptions import ToolError
+from pydantic import ValidationError
 
 import server
 
@@ -12,29 +13,22 @@ import server
 TZ = ZoneInfo("Asia/Kolkata")
 
 
-# --------------------------------------------------
-# 1. CREATE TIMED EVENT
-# --------------------------------------------------
-
+@pytest.mark.asyncio
 @pytest.mark.integration
-def test_create_timed_event():
+async def test_create_timed_event():
     with (
         patch(
             "server.check_availability",
-            return_value={
-                "available": True,
-                "busy_periods": [],
-            },
+            new_callable=AsyncMock,
+            return_value={"available": True, "busy_periods": []},
         ) as mock_availability,
         patch(
             "server.create_event",
-            return_value={
-                "id": "event_001",
-                "summary": "Team Meeting",
-            },
+            new_callable=AsyncMock,
+            return_value={"id": "event_001", "summary": "Team Meeting"},
         ) as mock_create,
     ):
-        result = server.create_calendar_event(
+        result = await server.create_calendar_event(
             title="Team Meeting",
             start="2026-11-10T10:00:00+05:30",
             end="2026-11-10T11:00:00+05:30",
@@ -42,33 +36,26 @@ def test_create_timed_event():
 
     assert result["success"] is True
     assert result["event"]["id"] == "event_001"
+    mock_availability.assert_awaited_once()
+    mock_create.assert_awaited_once()
 
-    mock_availability.assert_called_once()
-    mock_create.assert_called_once()
 
-
-# --------------------------------------------------
-# 2. CREATE ALL-DAY EVENT
-# --------------------------------------------------
+@pytest.mark.asyncio
 @pytest.mark.integration
-def test_create_all_day_event():
+async def test_create_all_day_event():
     with (
         patch(
             "server.check_availability",
-            return_value={
-                "available": True,
-                "busy_periods": [],
-            },
+            new_callable=AsyncMock,
+            return_value={"available": True, "busy_periods": []},
         ),
         patch(
             "server.create_event",
-            return_value={
-                "id": "event_002",
-                "summary": "Project Submission",
-            },
+            new_callable=AsyncMock,
+            return_value={"id": "event_002"},
         ) as mock_create,
     ):
-        result = server.create_calendar_event(
+        result = await server.create_calendar_event(
             title="Project Submission",
             start="2026-11-10",
             end="2026-11-11",
@@ -76,60 +63,54 @@ def test_create_all_day_event():
         )
 
     assert result["success"] is True
-    mock_create.assert_called_once()
+    assert result["user_visible_range"] == {
+        "start_date": "2026-11-10",
+        "end_date_inclusive": "2026-11-11",
+    }
+    mock_create.assert_awaited_once()
 
 
-# --------------------------------------------------
-# 3. DEFAULT ONE-HOUR DURATION
-# --------------------------------------------------
+@pytest.mark.asyncio
 @pytest.mark.integration
-def test_create_timed_event_without_end_uses_one_hour():
+async def test_create_timed_event_without_end_uses_one_hour():
     with (
         patch(
             "server.check_availability",
-            return_value={
-                "available": True,
-                "busy_periods": [],
-            },
+            new_callable=AsyncMock,
+            return_value={"available": True, "busy_periods": []},
         ),
         patch(
             "server.create_event",
+            new_callable=AsyncMock,
             return_value={"id": "event_003"},
         ) as mock_create,
     ):
-        result = server.create_calendar_event(
+        result = await server.create_calendar_event(
             title="Quick Meeting",
             start="2026-11-10T10:00:00+05:30",
         )
 
     assert result["success"] is True
-
-    kwargs = mock_create.call_args.kwargs
-
+    kwargs = mock_create.await_args.kwargs
     assert kwargs["end"] - kwargs["start"] == timedelta(hours=1)
 
 
-# --------------------------------------------------
-# 4. CREATE RECURRING EVENT
-# --------------------------------------------------
+@pytest.mark.asyncio
 @pytest.mark.integration
-def test_create_recurring_event():
-
+async def test_create_recurring_event():
     with (
         patch(
             "server.check_availability",
-            return_value={
-                "available": True,
-                "busy_periods": [],
-            },
+            new_callable=AsyncMock,
+            return_value={"available": True, "busy_periods": []},
         ),
         patch(
             "server.create_event",
+            new_callable=AsyncMock,
             return_value={"id": "event_004"},
         ) as mock_create,
     ):
-
-        result = server.create_calendar_event(
+        result = await server.create_calendar_event(
             title="Daily Standup",
             start="2026-11-10T10:00:00+05:30",
             recurrence_frequency="DAILY",
@@ -138,20 +119,15 @@ def test_create_recurring_event():
         )
 
     assert result["success"] is True
-
-    kwargs = mock_create.call_args.kwargs
-
-    assert kwargs["recurrence"] == [
+    assert mock_create.await_args.kwargs["recurrence"] == [
         "RRULE:FREQ=DAILY;INTERVAL=1;COUNT=7"
     ]
 
 
-# --------------------------------------------------
-# 5. CONFLICT WITHOUT USER APPROVAL
-# --------------------------------------------------
+@pytest.mark.asyncio
 @pytest.mark.integration
-def test_create_event_with_conflict_without_permission():
-    busy_periods = [
+async def test_create_event_with_conflict_without_permission():
+    busy = [
         {
             "start": "2026-11-10T10:00:00+05:30",
             "end": "2026-11-10T11:00:00+05:30",
@@ -161,14 +137,15 @@ def test_create_event_with_conflict_without_permission():
     with (
         patch(
             "server.check_availability",
-            return_value={
-                "available": False,
-                "busy_periods": busy_periods,
-            },
+            new_callable=AsyncMock,
+            return_value={"available": False, "busy_periods": busy},
         ),
-        patch("server.create_event") as mock_create,
+        patch(
+            "server.create_event",
+            new_callable=AsyncMock,
+        ) as mock_create,
     ):
-        result = server.create_calendar_event(
+        result = await server.create_calendar_event(
             title="Conflicting Meeting",
             start="2026-11-10T10:00:00+05:30",
             end="2026-11-10T11:00:00+05:30",
@@ -176,35 +153,33 @@ def test_create_event_with_conflict_without_permission():
 
     assert result["success"] is False
     assert result["conflict"] is True
-    assert result["busy_periods"] == busy_periods
+    assert result["busy_periods"] == busy
+    mock_create.assert_not_awaited()
 
-    mock_create.assert_not_called()
 
-
-# --------------------------------------------------
-# 6. CONFLICT WITH USER APPROVAL
-# --------------------------------------------------
+@pytest.mark.asyncio
 @pytest.mark.integration
-def test_create_event_with_conflict_and_permission():
+async def test_create_event_with_conflict_and_permission():
+    busy = [
+        {
+            "start": "2026-11-10T10:00:00+05:30",
+            "end": "2026-11-10T11:00:00+05:30",
+        }
+    ]
+
     with (
         patch(
             "server.check_availability",
-            return_value={
-                "available": False,
-                "busy_periods": [
-                    {
-                        "start": "2026-11-10T10:00:00+05:30",
-                        "end": "2026-11-10T11:00:00+05:30",
-                    }
-                ],
-            },
+            new_callable=AsyncMock,
+            return_value={"available": False, "busy_periods": busy},
         ),
         patch(
             "server.create_event",
+            new_callable=AsyncMock,
             return_value={"id": "event_005"},
         ) as mock_create,
     ):
-        result = server.create_calendar_event(
+        result = await server.create_calendar_event(
             title="Approved Conflicting Meeting",
             start="2026-11-10T10:00:00+05:30",
             end="2026-11-10T11:00:00+05:30",
@@ -213,32 +188,36 @@ def test_create_event_with_conflict_and_permission():
 
     assert result["success"] is True
     assert result["event"]["id"] == "event_005"
+    mock_create.assert_awaited_once()
 
-    mock_create.assert_called_once()
 
 
-# --------------------------------------------------
-# 7. INVALID EVENT TITLE
-# --------------------------------------------------
+@pytest.mark.asyncio
 @pytest.mark.integration
-def test_create_event_invalid_title():
+async def test_create_event_invalid_title():
     with (
-        patch("server.create_event") as mock_create,
-        pytest.raises(ToolError),
+        patch(
+            "server.create_event",
+            new_callable=AsyncMock,
+        ) as mock_create,
+        pytest.raises(ValidationError),
     ):
-        server.create_calendar_event(
+        await server.create_calendar_event(
             title="",
             start="2026-11-10T10:00:00+05:30",
         )
 
-    mock_create.assert_not_called()
+    mock_create.assert_not_awaited()
 
+
+@pytest.mark.asyncio
 @pytest.mark.integration
-def test_weekly_recurrence_rejects_mismatched_start_day():
-
-    with pytest.raises(ToolError):
-
-        server.create_calendar_event(
+async def test_weekly_recurrence_rejects_mismatched_start_day():
+    with pytest.raises(
+        ValueError,
+        match="starting date falls on TU",
+    ):
+        await server.create_calendar_event(
             title="Weekly Meeting",
             start="2026-11-10T10:00:00+05:30",
             recurrence_frequency="WEEKLY",
@@ -246,10 +225,12 @@ def test_weekly_recurrence_rejects_mismatched_start_day():
             recurrence_count=10,
         )
 
-@pytest.mark.integration
-def test_recurring_event_rejects_conflict_on_later_occurrence():
 
-    busy_periods = [
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_recurring_event_rejects_conflict_on_later_occurrence():
+    busy = [
         {
             "start": "2026-11-11T15:45:00+05:30",
             "end": "2026-11-11T16:00:00+05:30",
@@ -259,17 +240,15 @@ def test_recurring_event_rejects_conflict_on_later_occurrence():
     with (
         patch(
             "server.check_availability",
-            return_value={
-                "available": False,
-                "busy_periods": busy_periods,
-            },
+            new_callable=AsyncMock,
+            return_value={"available": False, "busy_periods": busy},
         ),
         patch(
-            "server.create_event"
+            "server.create_event",
+            new_callable=AsyncMock,
         ) as mock_create,
     ):
-
-        result = server.create_calendar_event(
+        result = await server.create_calendar_event(
             title="Workout Prep",
             start="2026-11-09T15:30:00+05:30",
             recurrence_frequency="DAILY",
@@ -279,7 +258,5 @@ def test_recurring_event_rejects_conflict_on_later_occurrence():
 
     assert result["success"] is False
     assert result["conflict"] is True
-
     assert result["conflicting_occurrences"]
-
-    mock_create.assert_not_called()
+    mock_create.assert_not_awaited()

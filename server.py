@@ -1,10 +1,11 @@
+import asyncio
+
 from datetime import date, datetime, time, timedelta
 from typing import Annotated, Literal
 
 from fastmcp import FastMCP
 from pydantic import Field
 
-from errors.error_handler import handle_tool_errors
 from errors.exceptions import ConfirmationRequiredError
 
 from services.event_service import (
@@ -58,8 +59,7 @@ mcp = FastMCP("Google Calendar MCP", mask_error_details=True)
 
 
 @mcp.tool()
-@handle_tool_errors
-def create_calendar_event(
+async def create_calendar_event(
     title: Annotated[
         str,
         Field(
@@ -345,7 +345,7 @@ IMPORTANT:
     range_start = min(item[0] for item in occurrences)
     range_end = max(item[1] for item in occurrences)
 
-    availability = check_availability(
+    availability = await check_availability(
         range_start,
         range_end,
     )
@@ -380,7 +380,7 @@ IMPORTANT:
 
         return result
 
-    event = create_event(
+    event = await create_event(
         title=payload.title,
         start=start_value,
         end=end_value,
@@ -423,8 +423,7 @@ IMPORTANT:
 
 
 @mcp.tool()
-@handle_tool_errors
-def edit_calendar_event(
+async def edit_calendar_event(
     event_id: Annotated[
         str,
         Field(
@@ -482,7 +481,7 @@ IMPORTANT:
         }
     )
 
-    return update_event(
+    return await update_event(
         payload.event_id,
         payload.updates,
     )
@@ -494,8 +493,7 @@ IMPORTANT:
 
 
 @mcp.tool()
-@handle_tool_errors
-def remove_calendar_event(
+async def remove_calendar_event(
     event_id: Annotated[
         str,
         Field(
@@ -566,12 +564,12 @@ IMPORTANT:
         )
 
     if payload.recurrence_scope is None:
-        return delete_event(
+        return await delete_event(
             payload.event_id,
             payload.confirmed,
         )
 
-    return delete_event(
+    return await delete_event(
         payload.event_id,
         payload.confirmed,
         payload.recurrence_scope,
@@ -584,8 +582,7 @@ IMPORTANT:
 
 
 @mcp.tool()
-@handle_tool_errors
-def get_calendar_event(
+async def get_calendar_event(
     event_id: Annotated[
         str,
         Field(
@@ -629,7 +626,7 @@ IMPORTANT:
         }
     )
 
-    return get_event_details(payload.event_id)
+    return await get_event_details(payload.event_id)
 
 
 # ==================================================
@@ -638,8 +635,7 @@ IMPORTANT:
 
 
 @mcp.tool()
-@handle_tool_errors
-def postpone_calendar_event(
+async def postpone_calendar_event(
     event_id: Annotated[
         str,
         Field(
@@ -708,7 +704,7 @@ IMPORTANT:
         }
     )
 
-    existing = get_event_details(payload.event_id)
+    existing = await get_event_details(payload.event_id)
     is_all_day = "date" in existing.get("start", {})
 
     if is_all_day:
@@ -725,7 +721,7 @@ IMPORTANT:
         parsed_end = parse_datetime(payload.new_end)
         parsed_end_inclusive = None
 
-    updated_event = postpone_event(
+    updated_event = await postpone_event(
         payload.event_id,
         parsed_start,
         parsed_end,
@@ -751,8 +747,7 @@ IMPORTANT:
 
 
 @mcp.tool()
-@handle_tool_errors
-def find_calendar_events(
+async def find_calendar_events(
     start: Annotated[
         str,
         Field(
@@ -821,7 +816,7 @@ IMPORTANT:
         payload.end,
     )
 
-    return search_events(
+    return await search_events(
         start_datetime,
         end_datetime,
         payload.title,
@@ -834,8 +829,7 @@ IMPORTANT:
 
 
 @mcp.tool()
-@handle_tool_errors
-def find_similar_calendar_events(
+async def find_similar_calendar_events(
     title: Annotated[
         str,
         Field(
@@ -902,7 +896,7 @@ IMPORTANT:
         payload.end,
     )
 
-    return find_similar_events(
+    return await find_similar_events(
         payload.title,
         start_datetime,
         end_datetime,
@@ -913,10 +907,8 @@ IMPORTANT:
 # 8. GET CALENDAR OVERVIEW
 # ==================================================
 
-
 @mcp.tool()
-@handle_tool_errors
-def get_calendar_overview(
+async def get_calendar_overview(
     period: Annotated[
         Literal["day", "week", "month"],
         Field(
@@ -969,20 +961,17 @@ IMPORTANT:
         }
     )
 
-    return get_calendar_summary(
+    return await get_calendar_summary(
         payload.period,
         payload.value,
     )
-
 
 # ==================================================
 # 9. CHECK CALENDAR AVAILABILITY
 # ==================================================
 
-
 @mcp.tool()
-@handle_tool_errors
-def check_calendar_availability(
+async def check_calendar_availability(
     start: Annotated[
         str,
         Field(
@@ -1036,7 +1025,7 @@ IMPORTANT:
         }
     )
 
-    return check_availability(
+    return await check_availability(
         parse_datetime(payload.start),
         parse_datetime(payload.end),
     )
@@ -1046,10 +1035,8 @@ IMPORTANT:
 # 10. SUGGEST AVAILABLE SLOTS
 # ==================================================
 
-
 @mcp.tool()
-@handle_tool_errors
-def suggest_available_slots(
+async def suggest_available_slots(
     start: Annotated[
         str,
         Field(
@@ -1169,7 +1156,7 @@ IMPORTANT:
         payload.end,
     )
 
-    return get_available_slots(
+    return await get_available_slots(
         start_value,
         end_value,
         payload.duration_minutes,
@@ -1180,15 +1167,12 @@ IMPORTANT:
         payload.exclude_weekends,
     )
 
-
 # ==================================================
 # 11. LIST CALENDARS
 # ==================================================
 
-
 @mcp.tool()
-@handle_tool_errors
-def get_calendar_list() -> list:
+async def get_calendar_list() -> list:
     """
 Retrieve calendars accessible through the authenticated Google account.
 
@@ -1217,7 +1201,7 @@ IMPORTANT:
 - Use the returned calendar ID when a tool supports calendar selection.
     """
 
-    calendars = list_calendars()
+    calendars = await list_calendars()
 
     return [
         {
@@ -1235,4 +1219,8 @@ IMPORTANT:
 # ==================================================
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    mcp.run(
+        transport="http",
+        host="0.0.0.0",
+        port=8000,
+    )

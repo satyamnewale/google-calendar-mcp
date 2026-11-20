@@ -5,21 +5,10 @@ from unittest.mock import MagicMock
 
 @pytest.fixture
 def mock_calendar_service():
-    """
-    Mock Google Calendar API service.
-
-    Supports:
-    - events().get()
-    - events().list()
-    - events().insert()
-    - events().update()
-    - events().delete()
-    - freebusy().query()
-    """
+    """Mock the synchronous Google Calendar API client."""
 
     service = MagicMock()
 
-    # Mock Events API
     events = service.events.return_value
 
     events.get.return_value.execute.return_value = {
@@ -52,13 +41,24 @@ def mock_calendar_service():
 
     events.update.return_value.execute.return_value = {
         "id": "test_event_001",
+        "etag": '"test-etag-001"',
         "summary": "Updated Meeting",
         "status": "confirmed",
     }
 
     events.delete.return_value.execute.return_value = {}
 
-    # Mock FreeBusy API
+    service.calendarList.return_value.list.return_value.execute.return_value = {
+        "items": [
+            {
+                "id": "primary",
+                "summary": "Primary Calendar",
+                "primary": True,
+                "timeZone": "Asia/Kolkata",
+            }
+        ]
+    }
+
     service.freebusy.return_value.query.return_value.execute.return_value = {
         "calendars": {
             "primary": {
@@ -72,8 +72,6 @@ def mock_calendar_service():
 
 @pytest.fixture
 def sample_timed_event():
-    """A sample timed Google Calendar event."""
-
     return {
         "id": "test_event_001",
         "etag": '"test-etag-001"',
@@ -94,26 +92,18 @@ def sample_timed_event():
 
 @pytest.fixture
 def sample_all_day_event():
-    """A sample all-day Google Calendar event."""
-
     return {
         "id": "test_event_002",
         "summary": "Project Submission",
         "description": "Submit the project",
-        "start": {
-            "date": "2026-11-10",
-        },
-        "end": {
-            "date": "2026-11-11",
-        },
+        "start": {"date": "2026-11-10"},
+        "end": {"date": "2026-11-11"},
         "status": "confirmed",
     }
 
 
 @pytest.fixture
 def sample_busy_periods():
-    """Sample busy periods returned by Google FreeBusy API."""
-
     return [
         {
             "start": "2026-11-10T10:00:00+05:30",
@@ -128,8 +118,6 @@ def sample_busy_periods():
 
 @pytest.fixture
 def sample_event_updates():
-    """Valid event fields for update tests."""
-
     return {
         "summary": "Updated Team Meeting",
         "description": "Updated meeting agenda",

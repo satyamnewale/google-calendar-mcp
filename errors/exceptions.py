@@ -65,3 +65,9 @@ class CalendarResultLimitExceededError(CalendarError):
     """The requested result set exceeds the configured retrieval limit."""
 
     code = "RESULT_LIMIT_EXCEEDED"
+
+class CalendarFreeBusyError(CalendarError):
+    """Google Calendar could not retrieve availability information."""
+
+    code = "FREEBUSY_QUERY_FAILED"
+    retryable = True

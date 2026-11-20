@@ -1,4 +1,5 @@
 from datetime import datetime
+import asyncio
 
 from auth.google_auth import get_calendar_service
 
@@ -13,59 +14,51 @@ from errors.exceptions import (
     CalendarResultLimitExceededError,
 )
 
+async def _execute(request):
+    return await asyncio.to_thread(request.execute)
 
-def list_calendars():
-    service = get_calendar_service()
+async def list_calendars():
+    service = await asyncio.to_thread(get_calendar_service)
 
-    response = service.calendarList().list(
-        maxResults=100
-    ).execute()
+    response = await _execute(
+        service.calendarList().list(maxResults=100)
+    )
 
     return response.get("items", [])
 
 
-def get_event_by_id(event_id: str, calendar_id=CALENDAR_ID):
-    service = get_calendar_service()
+async def get_event_by_id(
+    event_id: str,
+    calendar_id=CALENDAR_ID,
+):
+    service = await asyncio.to_thread(get_calendar_service)
 
-    return service.events().get(
+    request = service.events().get(
         calendarId=calendar_id,
-        eventId=event_id
-    ).execute()
+        eventId=event_id,
+    )
+
+    return await _execute(request)
 
 
-def list_events_in_range(
+async def list_events_in_range(
     start_date: datetime,
     end_date: datetime,
     calendar_id=CALENDAR_ID,
     max_results=DEFAULT_MAX_RESULTS,
     include_cancelled=False,
 ):
-    """
-    Retrieve events with pagination.
-
-    If the result set exceeds max_results, raise an explicit
-    error instead of silently returning incomplete results.
-    """
-
     if not isinstance(start_date, datetime):
-        raise ValueError(
-            "start_date must be a datetime."
-        )
+        raise ValueError("start_date must be a datetime.")
 
     if not isinstance(end_date, datetime):
-        raise ValueError(
-            "end_date must be a datetime."
-        )
+        raise ValueError("end_date must be a datetime.")
 
     if start_date.tzinfo is None or end_date.tzinfo is None:
-        raise ValueError(
-            "Start and end must be timezone-aware."
-        )
+        raise ValueError("Start and end must be timezone-aware.")
 
     if start_date >= end_date:
-        raise ValueError(
-            "End date must be after start date."
-        )
+        raise ValueError("End date must be after start date.")
 
     if (
         not isinstance(max_results, int)
@@ -76,21 +69,16 @@ def list_events_in_range(
             f"max_results must be between 1 and {MAX_RESULTS_LIMIT}."
         )
 
-    service = get_calendar_service()
+    service = await asyncio.to_thread(get_calendar_service)
 
     events = []
     page_token = None
 
     while True:
-
         remaining = max_results - len(events)
+        page_size = min(remaining, 2500)
 
-        page_size = min(
-            remaining,
-            2500,
-        )
-
-        response = service.events().list(
+        request = service.events().list(
             calendarId=calendar_id,
             timeMin=start_date.isoformat(),
             timeMax=end_date.isoformat(),
@@ -99,19 +87,15 @@ def list_events_in_range(
             showDeleted=include_cancelled,
             maxResults=page_size,
             pageToken=page_token,
-        ).execute()
-
-        events.extend(
-            response.get("items", [])
         )
 
-        next_page_token = response.get(
-            "nextPageToken"
-        )
+        response = await _execute(request)
 
-        # More results exist, but the configured cap was reached.
+        events.extend(response.get("items", []))
+
+        next_page_token = response.get("nextPageToken")
+
         if next_page_token and len(events) >= max_results:
-
             raise CalendarResultLimitExceededError(
                 f"More than {max_results} events match the requested "
                 "range. Narrow the date range or increase the configured limit."
@@ -125,50 +109,42 @@ def list_events_in_range(
     return events
 
 
-def insert_calendar_event(
+async def insert_calendar_event(
     event_body: dict,
     calendar_id=CALENDAR_ID,
 ):
-    service = get_calendar_service()
+    service = await asyncio.to_thread(get_calendar_service)
 
-    return service.events().insert(
+    request = service.events().insert(
         calendarId=calendar_id,
         body=event_body,
-    ).execute()
+    )
 
+    return await _execute(request)
 
-def update_calendar_event(
+async def update_calendar_event(
     event_id: str,
     updates: dict,
     calendar_id=CALENDAR_ID,
     existing_event: dict | None = None,
 ):
-    """
-    Update an event using GET followed by conditional UPDATE.
-
-    Uses the event ETag to prevent overwriting changes made
-    by another client after the GET operation.
-    """
-
-    service = get_calendar_service()
-
     if existing_event is None:
-
-        existing_event = service.events().get(
-            calendarId=calendar_id,
-            eventId=event_id,
-        ).execute()
+        existing_event = await get_event_by_id(
+            event_id,
+            calendar_id,
+        )
 
     etag = existing_event.get("etag")
 
     if not etag:
         raise CalendarConcurrencyError(
-            "Cannot safely update this event because its ETag is missing. "
-            "Retrieve the event again before updating."
+            "Cannot safely update this event because its ETag is missing."
         )
 
     updated_event = existing_event.copy()
     updated_event.update(updates)
+
+    service = await asyncio.to_thread(get_calendar_service)
 
     request = service.events().update(
         calendarId=calendar_id,
@@ -178,34 +154,28 @@ def update_calendar_event(
 
     request.headers["If-Match"] = etag
 
-    return request.execute()
+    return await _execute(request)
 
 
-def delete_calendar_event(
+async def delete_calendar_event(
     event_id: str,
     calendar_id=CALENDAR_ID,
     existing_event: dict | None = None,
 ):
-    """
-    Delete an event only if it has not changed since retrieval.
-    """
-
-    service = get_calendar_service()
-
     if existing_event is None:
-
-        existing_event = service.events().get(
-            calendarId=calendar_id,
-            eventId=event_id,
-        ).execute()
+        existing_event = await get_event_by_id(
+            event_id,
+            calendar_id,
+        )
 
     etag = existing_event.get("etag")
 
     if not etag:
         raise CalendarConcurrencyError(
-            "Cannot safely delete this event because its ETag is missing. "
-            "Retrieve the event again before deletion."
+            "Cannot safely delete this event because its ETag is missing."
         )
+
+    service = await asyncio.to_thread(get_calendar_service)
 
     request = service.events().delete(
         calendarId=calendar_id,
@@ -214,7 +184,7 @@ def delete_calendar_event(
 
     request.headers["If-Match"] = etag
 
-    request.execute()
+    await _execute(request)
 
     return {
         "success": True,
