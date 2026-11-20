@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 from datetime import datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -22,7 +22,7 @@ NEW_END = "2026-11-12T11:00:00+05:30"
 # --------------------------------------------------
 
 
-def test_server_has_expected_tools():
+async def test_server_has_expected_tools():
     expected_tools = {
         "create_calendar_event",
         "edit_calendar_event",
@@ -37,15 +37,11 @@ def test_server_has_expected_tools():
         "get_calendar_list",
     }
 
-    result = server.mcp.list_tools()
+    registered_tools = await server.mcp.list_tools()
 
-    # Support both synchronous and asynchronous FastMCP versions.
-    if inspect.isawaitable(result):
-        registered_tools = asyncio.run(result)
-    else:
-        registered_tools = result
-
-    registered_names = {tool.name for tool in registered_tools}
+    registered_names = {
+        tool.name for tool in registered_tools
+    }
 
     assert registered_names == expected_tools
 
@@ -320,7 +316,7 @@ def test_create_calendar_event_rejects_invalid_recurrence_interval():
 # --------------------------------------------------
 
 
-def test_edit_calendar_event_valid_input():
+async def test_edit_calendar_event_valid_input():
     expected = {
         "id": "event_001",
         "summary": "Updated Meeting",
@@ -330,7 +326,7 @@ def test_edit_calendar_event_valid_input():
         "server.update_event",
         return_value=expected,
     ) as mock_update:
-        result = server.edit_calendar_event(
+        result = await server.edit_calendar_event(
             event_id="event_001",
             updates={
                 "summary": "Updated Meeting",

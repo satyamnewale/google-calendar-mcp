@@ -1,7 +1,7 @@
 
 from datetime import date, timedelta
 from zoneinfo import ZoneInfo
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 import pytest
 from fastmcp.exceptions import ToolError
@@ -16,6 +16,7 @@ TZ = ZoneInfo("Asia/Kolkata")
 # 1. CREATE TIMED EVENT
 # --------------------------------------------------
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 def test_create_timed_event():
     with (

@@ -12,16 +12,19 @@ dependencies = [
     "tzlocal>=5.4.5",
     "pydantic>=2.14.2",
     "fastmcp>=4.1.6",
+    "asyncio>=4.0.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
     "pytest-mock",
+    "pytest-asyncio",
 ]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
+asyncio_mode = "auto"
 
 testpaths = ["tests"]
 

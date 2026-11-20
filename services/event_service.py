@@ -1,4 +1,3 @@
-
 from datetime import datetime, date, timedelta
 
 from services.calendar_service import (
@@ -27,10 +26,11 @@ from config.settings import (
 
 from errors.exceptions import (
     EventAlreadyCancelledError,
-    ConfirmationRequiredError
+    ConfirmationRequiredError,
 )
 
-def create_event(
+
+async def create_event(
     title: str,
     start: datetime | date,
     end: datetime | date | None = None,
@@ -88,12 +88,10 @@ def create_event(
         "end": event_end,
         "reminders": {
             "useDefault": False,
-            "overrides": [
-                {
-                    "method": "popup",
-                    "minutes": reminder_minutes,
-                }
-            ],
+            "overrides": [{
+                "method": "popup",
+                "minutes": reminder_minutes,
+            }],
         },
     }
 
@@ -104,18 +102,16 @@ def create_event(
         event_body["location"] = location
 
     if recurrence:
-
         validate_recurrence_rule(
             recurrence,
             all_day=all_day,
         )
-
         event_body["recurrence"] = recurrence
 
-    return insert_calendar_event(event_body)
+    return await insert_calendar_event(event_body)
 
 
-def update_event(event_id: str, updates: dict):
+async def update_event(event_id: str, updates: dict):
 
     validate_event_update(updates)
 
@@ -123,7 +119,7 @@ def update_event(event_id: str, updates: dict):
 
     if "recurrence" in updates:
 
-        existing_event = get_event_by_id(event_id)
+        existing_event = await get_event_by_id(event_id)
 
         is_all_day = (
             "date" in existing_event.get("start", {})
@@ -134,37 +130,24 @@ def update_event(event_id: str, updates: dict):
             all_day=is_all_day,
         )
 
-    if existing_event is not None:
-        return update_calendar_event(
-            event_id=event_id,
-            updates=updates,
-            existing_event=existing_event,
-        )
-
-    return update_calendar_event(
+    return await update_calendar_event(
         event_id=event_id,
         updates=updates,
+        existing_event=existing_event,
     )
 
 
-def delete_event(
+async def delete_event(
     event_id: str,
     confirmed: bool = False,
     recurrence_scope: str | None = None,
 ):
-    """
-    Delete a calendar event.
-
-    Recurring master events require explicit series scope.
-    Recurring instances can be deleted individually.
-    """
-
     if not confirmed:
         raise ConfirmationRequiredError(
             "Event deletion requires explicit user confirmation."
         )
 
-    existing = get_event_by_id(event_id)
+    existing = await get_event_by_id(event_id)
 
     if existing.get("status") == "cancelled":
         raise EventAlreadyCancelledError(
@@ -177,7 +160,6 @@ def delete_event(
     )
 
     if is_recurring_master and recurrence_scope != "series":
-
         raise ConfirmationRequiredError(
             "This event is a recurring series. "
             "Specify recurrence_scope='series' and obtain explicit "
@@ -185,29 +167,28 @@ def delete_event(
         )
 
     if not is_recurring_master and recurrence_scope == "series":
-
         raise ValueError(
             "The selected event is not a recurring master event."
         )
 
-    return delete_calendar_event(
+    return await delete_calendar_event(
         event_id,
         existing_event=existing,
     )
 
 
-def get_event_details(event_id: str):
-    return get_event_by_id(event_id)
+async def get_event_details(event_id: str):
+    return await get_event_by_id(event_id)
 
 
-def postpone_event(
+async def postpone_event(
     event_id: str,
     new_start: datetime | date,
     new_end: datetime | date,
     existing_event: dict | None = None,
 ):
     if existing_event is None:
-        existing_event = get_event_by_id(event_id)
+        existing_event = await get_event_by_id(event_id)
 
     if existing_event.get("status") == "cancelled":
         raise ValueError(
@@ -224,36 +205,22 @@ def postpone_event(
         if isinstance(new_end, datetime):
             new_end = new_end.date()
 
-        validate_date_range(
-            new_start,
-            new_end,
-        )
+        validate_date_range(new_start, new_end)
 
         updates = {
-            "start": {
-                "date": new_start.isoformat()
-            },
-            "end": {
-                "date": new_end.isoformat()
-            },
+            "start": {"date": new_start.isoformat()},
+            "end": {"date": new_end.isoformat()},
         }
 
     else:
 
         if not isinstance(new_start, datetime):
-            raise ValueError(
-                "Timed events require datetime values."
-            )
+            raise ValueError("Timed events require datetime values.")
 
         if not isinstance(new_end, datetime):
-            raise ValueError(
-                "Timed events require datetime values."
-            )
+            raise ValueError("Timed events require datetime values.")
 
-        validate_event_time(
-            new_start,
-            new_end,
-        )
+        validate_event_time(new_start, new_end)
 
         updates = {
             "start": {
@@ -266,7 +233,7 @@ def postpone_event(
             },
         }
 
-    return update_calendar_event(
+    return await update_calendar_event(
         event_id=event_id,
         updates=updates,
         existing_event=existing_event,

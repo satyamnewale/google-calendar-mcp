@@ -6,8 +6,6 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-
-# Project root: calendar-mcp/
 BASE_DIR = Path(__file__).resolve().parents[1]
 
 CREDENTIALS_PATH = BASE_DIR / "credentials.json"
@@ -21,32 +19,24 @@ SCOPES = [
 
 
 def get_calendar_credentials():
-    """
-    Load existing Google OAuth credentials.
-    Refresh expired credentials or initiate OAuth login.
-    Save the resulting credentials in token.json.
-    """
 
     credentials = None
 
-    # 1. Load previously authorized credentials
     if TOKEN_PATH.exists():
         try:
             credentials = Credentials.from_authorized_user_file(
                 str(TOKEN_PATH),
-                SCOPES
+                SCOPES,
             )
         except (ValueError, OSError):
             credentials = None
 
-    # 2. Refresh expired credentials
     if credentials and credentials.expired and credentials.refresh_token:
         try:
             credentials.refresh(Request())
         except RefreshError:
             credentials = None
 
-    # 3. Start OAuth flow if credentials are missing or invalid
     if not credentials or not credentials.valid:
 
         if not CREDENTIALS_PATH.exists():
@@ -56,37 +46,30 @@ def get_calendar_credentials():
 
         flow = InstalledAppFlow.from_client_secrets_file(
             str(CREDENTIALS_PATH),
-            SCOPES
+            SCOPES,
         )
 
         credentials = flow.run_local_server(
             port=0,
             access_type="offline",
-            prompt="consent"
+            prompt="consent",
         )
 
-    # 4. Save credentials for future use
     TOKEN_PATH.write_text(
         credentials.to_json(),
-        encoding="utf-8"
+        encoding="utf-8",
     )
 
     return credentials
 
 
 def get_calendar_service():
-    """
-    Build and return an authenticated Google Calendar API client.
-    """
 
     credentials = get_calendar_credentials()
 
-    service = build(
+    return build(
         "calendar",
         "v3",
         credentials=credentials,
-        cache_discovery=False
+        cache_discovery=False,
     )
-
-    return service
-
