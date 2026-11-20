@@ -4,14 +4,14 @@ from auth.google_auth import get_calendar_service
 from config.settings import CALENDAR_ID, TIMEZONE
 
 from services.calendar_service import _execute
+import asyncio
+from errors.exceptions import CalendarFreeBusyError
 
 from utils.datetime_utils import to_rfc3339
 from utils.validators import (
     validate_event_time,
     validate_time_range,
 )
-
-
 
 async def check_availability(
     start_date: datetime,
@@ -20,7 +20,7 @@ async def check_availability(
 ):
     validate_time_range(start_date, end_date)
 
-    service = get_calendar_service()
+    service = await asyncio.to_thread(get_calendar_service)
 
     body = {
         "timeMin": to_rfc3339(start_date),
@@ -33,12 +33,16 @@ async def check_availability(
         service.freebusy().query(body=body)
     )
 
-    calendar_data = response.get("calendars", {}).get(calendar_id, {})
+    calendar_data = (
+        response.get("calendars", {}).get(calendar_id, {})
+    )
+
     errors = calendar_data.get("errors", [])
 
     if errors:
-        raise RuntimeError(
-            f"Google FreeBusy API returned errors: {errors}"
+        raise CalendarFreeBusyError(
+            "Google Calendar could not retrieve availability "
+            "for the requested calendar."
         )
 
     busy_periods = calendar_data.get("busy", [])
@@ -47,7 +51,6 @@ async def check_availability(
         "available": len(busy_periods) == 0,
         "busy_periods": busy_periods,
     }
-
 
 async def find_conflicts(
     start_date: datetime,

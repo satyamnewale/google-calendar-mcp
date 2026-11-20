@@ -18,11 +18,11 @@ async def _execute(request):
     return await asyncio.to_thread(request.execute)
 
 async def list_calendars():
-    service = get_calendar_service()
+    service = await asyncio.to_thread(get_calendar_service)
 
-    response = await _execute(service.calendarList().list(
-        maxResults=100
-    ))
+    response = await _execute(
+        service.calendarList().list(maxResults=100)
+    )
 
     return response.get("items", [])
 
@@ -31,14 +31,14 @@ async def get_event_by_id(
     event_id: str,
     calendar_id=CALENDAR_ID,
 ):
-    service = get_calendar_service()
+    service = await asyncio.to_thread(get_calendar_service)
 
-    return await _execute(
-        service.events().get(
-            calendarId=calendar_id,
-            eventId=event_id,
-        )
+    request = service.events().get(
+        calendarId=calendar_id,
+        eventId=event_id,
     )
+
+    return await _execute(request)
 
 
 async def list_events_in_range(
@@ -69,7 +69,7 @@ async def list_events_in_range(
             f"max_results must be between 1 and {MAX_RESULTS_LIMIT}."
         )
 
-    service = get_calendar_service()
+    service = await asyncio.to_thread(get_calendar_service)
 
     events = []
     page_token = None
@@ -113,15 +113,14 @@ async def insert_calendar_event(
     event_body: dict,
     calendar_id=CALENDAR_ID,
 ):
-    service = get_calendar_service()
+    service = await asyncio.to_thread(get_calendar_service)
 
-    return await _execute(
-        service.events().insert(
-            calendarId=calendar_id,
-            body=event_body,
-        )
+    request = service.events().insert(
+        calendarId=calendar_id,
+        body=event_body,
     )
 
+    return await _execute(request)
 
 async def update_calendar_event(
     event_id: str,
@@ -129,8 +128,6 @@ async def update_calendar_event(
     calendar_id=CALENDAR_ID,
     existing_event: dict | None = None,
 ):
-    service = get_calendar_service()
-
     if existing_event is None:
         existing_event = await get_event_by_id(
             event_id,
@@ -146,6 +143,8 @@ async def update_calendar_event(
 
     updated_event = existing_event.copy()
     updated_event.update(updates)
+
+    service = await asyncio.to_thread(get_calendar_service)
 
     request = service.events().update(
         calendarId=calendar_id,
@@ -163,8 +162,6 @@ async def delete_calendar_event(
     calendar_id=CALENDAR_ID,
     existing_event: dict | None = None,
 ):
-    service = get_calendar_service()
-
     if existing_event is None:
         existing_event = await get_event_by_id(
             event_id,
@@ -177,6 +174,8 @@ async def delete_calendar_event(
         raise CalendarConcurrencyError(
             "Cannot safely delete this event because its ETag is missing."
         )
+
+    service = await asyncio.to_thread(get_calendar_service)
 
     request = service.events().delete(
         calendarId=calendar_id,

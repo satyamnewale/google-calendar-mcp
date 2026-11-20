@@ -12,7 +12,6 @@ dependencies = [
     "tzlocal>=5.4.5",
     "pydantic>=2.14.2",
     "fastmcp>=4.1.6",
-    "asyncio>=4.0.0",
 ]
 
 [dependency-groups]

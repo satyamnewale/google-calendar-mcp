@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from services import availability_service
-
+from errors.exceptions import CalendarFreeBusyError
 
 TZ = ZoneInfo("Asia/Kolkata")
 
@@ -120,15 +120,23 @@ async def test_check_availability_rejects_invalid_range(mock_freebusy):
 
 @pytest.mark.asyncio
 @pytest.mark.services
-async def test_check_availability_raises_on_google_calendar_errors(mock_freebusy):
+async def test_check_availability_raises_on_google_calendar_errors(
+    mock_freebusy,
+):
     set_busy(
         mock_freebusy,
         [],
         errors=[{"reason": "notFound"}],
     )
 
-    with pytest.raises(RuntimeError, match="FreeBusy API returned errors"):
-        await availability_service.check_availability(dt(9), dt(10))
+    with pytest.raises(
+        CalendarFreeBusyError,
+        match="Google Calendar could not retrieve availability",
+    ):
+        await availability_service.check_availability(
+            dt(9),
+            dt(10),
+        )
 
 
 @pytest.mark.asyncio
