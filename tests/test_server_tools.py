@@ -1,5 +1,4 @@
-import asyncio
-import inspect
+
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
@@ -7,6 +6,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 import server
+
 
 TZ = ZoneInfo("Asia/Kolkata")
 
@@ -22,6 +22,7 @@ NEW_END = "2026-11-12T11:00:00+05:30"
 # --------------------------------------------------
 
 
+@pytest.mark.asyncio
 async def test_server_has_expected_tools():
     expected_tools = {
         "create_calendar_event",
@@ -51,7 +52,9 @@ async def test_server_has_expected_tools():
 # --------------------------------------------------
 
 
-def test_create_calendar_event_valid_timed_event():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_create_calendar_event_valid_timed_event():
     expected_event = {
         "id": "event_001",
         "summary": "Team Meeting",
@@ -60,6 +63,7 @@ def test_create_calendar_event_valid_timed_event():
     with (
         patch(
             "server.check_availability",
+            new_callable=AsyncMock,
             return_value={
                 "available": True,
                 "busy_periods": [],
@@ -67,10 +71,11 @@ def test_create_calendar_event_valid_timed_event():
         ) as mock_availability,
         patch(
             "server.create_event",
+            new_callable=AsyncMock,
             return_value=expected_event,
         ) as mock_create,
     ):
-        result = server.create_calendar_event(
+        result = await server.create_calendar_event(
             title="Team Meeting",
             start=START,
             end=END,
@@ -87,10 +92,10 @@ def test_create_calendar_event_valid_timed_event():
         },
     }
 
-    mock_availability.assert_called_once()
-    mock_create.assert_called_once()
+    mock_availability.assert_awaited_once()
+    mock_create.assert_awaited_once()
 
-    kwargs = mock_create.call_args.kwargs
+    kwargs = mock_create.await_args.kwargs
 
     assert kwargs["title"] == "Team Meeting"
     assert kwargs["description"] == "Discuss sprint progress"
@@ -98,7 +103,9 @@ def test_create_calendar_event_valid_timed_event():
     assert kwargs["all_day"] is False
 
 
-def test_create_calendar_event_all_day_checks_availability():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_create_calendar_event_all_day_checks_availability():
     expected_event = {
         "id": "event_002",
         "summary": "Project Submission",
@@ -107,6 +114,7 @@ def test_create_calendar_event_all_day_checks_availability():
     with (
         patch(
             "server.check_availability",
+            new_callable=AsyncMock,
             return_value={
                 "available": True,
                 "busy_periods": [],
@@ -114,10 +122,11 @@ def test_create_calendar_event_all_day_checks_availability():
         ) as mock_availability,
         patch(
             "server.create_event",
+            new_callable=AsyncMock,
             return_value=expected_event,
         ) as mock_create,
     ):
-        result = server.create_calendar_event(
+        result = await server.create_calendar_event(
             title="Project Submission",
             start="2026-11-10",
             end="2026-11-11",
@@ -137,12 +146,15 @@ def test_create_calendar_event_all_day_checks_availability():
         },
     }
 
-    mock_availability.assert_called_once()
-    mock_create.assert_called_once()
-    assert mock_create.call_args.kwargs["all_day"] is True
+    mock_availability.assert_awaited_once()
+    mock_create.assert_awaited_once()
+
+    assert mock_create.await_args.kwargs["all_day"] is True
 
 
-def test_create_calendar_event_uses_default_one_hour_end():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_create_calendar_event_uses_default_one_hour_end():
     expected_event = {
         "id": "event_003",
         "summary": "Quick Meeting",
@@ -151,6 +163,7 @@ def test_create_calendar_event_uses_default_one_hour_end():
     with (
         patch(
             "server.check_availability",
+            new_callable=AsyncMock,
             return_value={
                 "available": True,
                 "busy_periods": [],
@@ -158,24 +171,34 @@ def test_create_calendar_event_uses_default_one_hour_end():
         ) as mock_availability,
         patch(
             "server.create_event",
+            new_callable=AsyncMock,
             return_value=expected_event,
         ) as mock_create,
     ):
-        result = server.create_calendar_event(
+        result = await server.create_calendar_event(
             title="Quick Meeting",
             start=START,
         )
 
     assert result["success"] is True
 
-    availability_start, availability_end = mock_availability.call_args.args
+    availability_start, availability_end = (
+        mock_availability.await_args.args
+    )
 
-    assert (availability_end - availability_start).total_seconds() == 3600
+    assert (
+        availability_end - availability_start
+    ).total_seconds() == 3600
 
-    assert mock_create.call_args.kwargs["end"] == availability_end
+    assert (
+        mock_create.await_args.kwargs["end"]
+        == availability_end
+    )
 
 
-def test_create_calendar_event_returns_conflict_without_creating():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_create_calendar_event_returns_conflict_without_creating():
     busy = [
         {
             "start": START,
@@ -186,6 +209,7 @@ def test_create_calendar_event_returns_conflict_without_creating():
     with (
         patch(
             "server.check_availability",
+            new_callable=AsyncMock,
             return_value={
                 "available": False,
                 "busy_periods": busy,
@@ -193,9 +217,10 @@ def test_create_calendar_event_returns_conflict_without_creating():
         ),
         patch(
             "server.create_event",
+            new_callable=AsyncMock,
         ) as mock_create,
     ):
-        result = server.create_calendar_event(
+        result = await server.create_calendar_event(
             title="Team Meeting",
             start=START,
             end=END,
@@ -205,10 +230,12 @@ def test_create_calendar_event_returns_conflict_without_creating():
     assert result["conflict"] is True
     assert result["busy_periods"] == busy
 
-    mock_create.assert_not_called()
+    mock_create.assert_not_awaited()
 
 
-def test_create_calendar_event_allows_conflict_when_user_approves():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_create_calendar_event_allows_conflict_when_user_approves():
     expected_event = {
         "id": "event_004",
         "summary": "Approved Meeting",
@@ -217,6 +244,7 @@ def test_create_calendar_event_allows_conflict_when_user_approves():
     with (
         patch(
             "server.check_availability",
+            new_callable=AsyncMock,
             return_value={
                 "available": False,
                 "busy_periods": [
@@ -229,10 +257,11 @@ def test_create_calendar_event_allows_conflict_when_user_approves():
         ),
         patch(
             "server.create_event",
+            new_callable=AsyncMock,
             return_value=expected_event,
         ) as mock_create,
     ):
-        result = server.create_calendar_event(
+        result = await server.create_calendar_event(
             title="Approved Meeting",
             start=START,
             end=END,
@@ -248,11 +277,12 @@ def test_create_calendar_event_allows_conflict_when_user_approves():
         },
     }
 
-    mock_create.assert_called_once()
+    mock_create.assert_awaited_once()
 
 
+@pytest.mark.asyncio
 @pytest.mark.unit
-def test_create_calendar_event_builds_recurrence_rule():
+async def test_create_calendar_event_builds_recurrence_rule():
     expected_event = {
         "id": "event_005",
         "summary": "Daily Standup",
@@ -261,6 +291,7 @@ def test_create_calendar_event_builds_recurrence_rule():
     with (
         patch(
             "server.check_availability",
+            new_callable=AsyncMock,
             return_value={
                 "available": True,
                 "busy_periods": [],
@@ -268,14 +299,17 @@ def test_create_calendar_event_builds_recurrence_rule():
         ),
         patch(
             "server.build_recurrence_rule",
-            return_value=["RRULE:FREQ=DAILY;INTERVAL=1;COUNT=7"],
+            return_value=[
+                "RRULE:FREQ=DAILY;INTERVAL=1;COUNT=7"
+            ],
         ) as mock_rule,
         patch(
             "server.create_event",
+            new_callable=AsyncMock,
             return_value=expected_event,
         ) as mock_create,
     ):
-        result = server.create_calendar_event(
+        result = await server.create_calendar_event(
             title="Daily Standup",
             start=START,
             end=END,
@@ -295,14 +329,16 @@ def test_create_calendar_event_builds_recurrence_rule():
         all_day=False,
     )
 
-    assert mock_create.call_args.kwargs["recurrence"] == [
+    assert mock_create.await_args.kwargs["recurrence"] == [
         "RRULE:FREQ=DAILY;INTERVAL=1;COUNT=7"
     ]
 
 
-def test_create_calendar_event_rejects_invalid_recurrence_interval():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_create_calendar_event_rejects_invalid_recurrence_interval():
     with pytest.raises(Exception):
-        server.create_calendar_event(
+        await server.create_calendar_event(
             title="Daily Standup",
             start=START,
             end=END,
@@ -316,6 +352,8 @@ def test_create_calendar_event_rejects_invalid_recurrence_interval():
 # --------------------------------------------------
 
 
+@pytest.mark.asyncio
+@pytest.mark.unit
 async def test_edit_calendar_event_valid_input():
     expected = {
         "id": "event_001",
@@ -324,6 +362,7 @@ async def test_edit_calendar_event_valid_input():
 
     with patch(
         "server.update_event",
+        new_callable=AsyncMock,
         return_value=expected,
     ) as mock_update:
         result = await server.edit_calendar_event(
@@ -335,7 +374,7 @@ async def test_edit_calendar_event_valid_input():
 
     assert result == expected
 
-    mock_update.assert_called_once_with(
+    mock_update.assert_awaited_once_with(
         "event_001",
         {
             "summary": "Updated Meeting",
@@ -343,9 +382,11 @@ async def test_edit_calendar_event_valid_input():
     )
 
 
-def test_edit_calendar_event_rejects_empty_event_id():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_edit_calendar_event_rejects_empty_event_id():
     with pytest.raises(Exception):
-        server.edit_calendar_event(
+        await server.edit_calendar_event(
             event_id="",
             updates={
                 "summary": "Updated Meeting",
@@ -353,19 +394,24 @@ def test_edit_calendar_event_rejects_empty_event_id():
         )
 
 
-def test_edit_calendar_event_rejects_unsupported_update_field():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_edit_calendar_event_rejects_unsupported_update_field():
     with (
-        patch("server.update_event") as mock_update,
+        patch(
+            "server.update_event",
+            new_callable=AsyncMock,
+        ) as mock_update,
         pytest.raises(Exception),
     ):
-        server.edit_calendar_event(
+        await server.edit_calendar_event(
             event_id="event_001",
             updates={
                 "unsupported_field": "value",
             },
         )
 
-    mock_update.assert_not_called()
+    mock_update.assert_not_awaited()
 
 
 # --------------------------------------------------
@@ -373,20 +419,27 @@ def test_edit_calendar_event_rejects_unsupported_update_field():
 # --------------------------------------------------
 
 
-def test_remove_calendar_event_requires_confirmation():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_remove_calendar_event_requires_confirmation():
     with (
-        patch("server.delete_event") as mock_delete,
+        patch(
+            "server.delete_event",
+            new_callable=AsyncMock,
+        ) as mock_delete,
         pytest.raises(Exception),
     ):
-        server.remove_calendar_event(
+        await server.remove_calendar_event(
             event_id="event_001",
             confirmed=False,
         )
 
-    mock_delete.assert_not_called()
+    mock_delete.assert_not_awaited()
 
 
-def test_remove_calendar_event_after_confirmation():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_remove_calendar_event_after_confirmation():
     expected = {
         "success": True,
         "event_id": "event_001",
@@ -394,16 +447,17 @@ def test_remove_calendar_event_after_confirmation():
 
     with patch(
         "server.delete_event",
+        new_callable=AsyncMock,
         return_value=expected,
     ) as mock_delete:
-        result = server.remove_calendar_event(
+        result = await server.remove_calendar_event(
             event_id="event_001",
             confirmed=True,
         )
 
     assert result == expected
 
-    mock_delete.assert_called_once_with(
+    mock_delete.assert_awaited_once_with(
         "event_001",
         True,
     )
@@ -414,7 +468,9 @@ def test_remove_calendar_event_after_confirmation():
 # --------------------------------------------------
 
 
-def test_get_calendar_event_returns_details():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_get_calendar_event_returns_details():
     expected = {
         "id": "event_001",
         "summary": "Team Meeting",
@@ -423,18 +479,21 @@ def test_get_calendar_event_returns_details():
 
     with patch(
         "server.get_event_details",
+        new_callable=AsyncMock,
         return_value=expected,
     ) as mock_get:
-        result = server.get_calendar_event("event_001")
+        result = await server.get_calendar_event("event_001")
 
     assert result == expected
 
-    mock_get.assert_called_once_with("event_001")
+    mock_get.assert_awaited_once_with("event_001")
 
 
-def test_get_calendar_event_rejects_empty_id():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_get_calendar_event_rejects_empty_id():
     with pytest.raises(Exception):
-        server.get_calendar_event("")
+        await server.get_calendar_event("")
 
 
 # --------------------------------------------------
@@ -442,7 +501,9 @@ def test_get_calendar_event_rejects_empty_id():
 # --------------------------------------------------
 
 
-def test_postpone_timed_calendar_event():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_postpone_timed_calendar_event():
     existing = {
         "id": "event_001",
         "start": {
@@ -458,13 +519,18 @@ def test_postpone_timed_calendar_event():
         "summary": "Team Meeting",
     }
 
-    parsed_start = datetime(2026, 11, 12, 10, 0, tzinfo=TZ)
+    parsed_start = datetime(
+        2026, 11, 12, 10, 0, tzinfo=TZ
+    )
 
-    parsed_end = datetime(2026, 11, 12, 11, 0, tzinfo=TZ)
+    parsed_end = datetime(
+        2026, 11, 12, 11, 0, tzinfo=TZ
+    )
 
     with (
         patch(
             "server.get_event_details",
+            new_callable=AsyncMock,
             return_value=existing,
         ),
         patch(
@@ -473,10 +539,11 @@ def test_postpone_timed_calendar_event():
         ),
         patch(
             "server.postpone_event",
+            new_callable=AsyncMock,
             return_value=expected,
         ) as mock_postpone,
     ):
-        result = server.postpone_calendar_event(
+        result = await server.postpone_calendar_event(
             event_id="event_001",
             new_start=NEW_START,
             new_end=NEW_END,
@@ -484,7 +551,7 @@ def test_postpone_timed_calendar_event():
 
     assert result == expected
 
-    mock_postpone.assert_called_once_with(
+    mock_postpone.assert_awaited_once_with(
         "event_001",
         parsed_start,
         parsed_end,
@@ -492,7 +559,9 @@ def test_postpone_timed_calendar_event():
     )
 
 
-def test_postpone_all_day_calendar_event():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_postpone_all_day_calendar_event():
     existing = {
         "id": "event_002",
         "start": {
@@ -508,25 +577,38 @@ def test_postpone_all_day_calendar_event():
         "summary": "Project Submission",
     }
 
-    parsed_start = datetime(2026, 11, 12, tzinfo=TZ).date()
-    parsed_end_inclusive = datetime(2026, 11, 13, tzinfo=TZ).date()
-    parsed_end_exclusive = parsed_end_inclusive + timedelta(days=1)
+    parsed_start = datetime(
+        2026, 11, 12, tzinfo=TZ
+    ).date()
+
+    parsed_end_inclusive = datetime(
+        2026, 11, 13, tzinfo=TZ
+    ).date()
+
+    parsed_end_exclusive = (
+        parsed_end_inclusive + timedelta(days=1)
+    )
 
     with (
         patch(
             "server.get_event_details",
+            new_callable=AsyncMock,
             return_value=existing,
         ),
         patch(
             "server.resolve_date_expression",
-            side_effect=[parsed_start, parsed_end_inclusive],
+            side_effect=[
+                parsed_start,
+                parsed_end_inclusive,
+            ],
         ),
         patch(
             "server.postpone_event",
+            new_callable=AsyncMock,
             return_value=expected_event,
         ) as mock_postpone,
     ):
-        result = server.postpone_calendar_event(
+        result = await server.postpone_calendar_event(
             event_id="event_002",
             new_start="2026-11-12",
             new_end="2026-11-13",
@@ -541,19 +623,22 @@ def test_postpone_all_day_calendar_event():
         },
     }
 
-    mock_postpone.assert_called_once_with(
+    mock_postpone.assert_awaited_once_with(
         "event_002",
         parsed_start,
         parsed_end_exclusive,
         existing_event=existing,
     )
 
+
 # --------------------------------------------------
 # 7. FIND CALENDAR EVENTS
 # --------------------------------------------------
 
 
-def test_find_calendar_events():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_find_calendar_events():
     expected = [
         {
             "id": "event_001",
@@ -561,9 +646,13 @@ def test_find_calendar_events():
         }
     ]
 
-    parsed_start = datetime(2026, 11, 10, 10, 0, tzinfo=TZ)
+    parsed_start = datetime(
+        2026, 11, 10, 10, 0, tzinfo=TZ
+    )
 
-    parsed_end = datetime(2026, 11, 10, 11, 0, tzinfo=TZ)
+    parsed_end = datetime(
+        2026, 11, 10, 11, 0, tzinfo=TZ
+    )
 
     with (
         patch(
@@ -572,10 +661,11 @@ def test_find_calendar_events():
         ) as mock_range,
         patch(
             "server.search_events",
+            new_callable=AsyncMock,
             return_value=expected,
         ) as mock_search,
     ):
-        result = server.find_calendar_events(
+        result = await server.find_calendar_events(
             start=START,
             end=END,
             title="Team",
@@ -585,18 +675,23 @@ def test_find_calendar_events():
 
     mock_range.assert_called_once_with(START, END)
 
-    mock_search.assert_called_once_with(
+    mock_search.assert_awaited_once_with(
         parsed_start,
         parsed_end,
         "Team",
     )
 
 
-def test_find_calendar_events_without_title():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_find_calendar_events_without_title():
+    parsed_start = datetime(
+        2026, 11, 10, 10, 0, tzinfo=TZ
+    )
 
-    parsed_start = datetime(2026, 11, 10, 10, 0, tzinfo=TZ)
-
-    parsed_end = datetime(2026, 11, 10, 11, 0, tzinfo=TZ)
+    parsed_end = datetime(
+        2026, 11, 10, 11, 0, tzinfo=TZ
+    )
 
     with (
         patch(
@@ -605,10 +700,11 @@ def test_find_calendar_events_without_title():
         ) as mock_range,
         patch(
             "server.search_events",
+            new_callable=AsyncMock,
             return_value=[],
         ) as mock_search,
     ):
-        result = server.find_calendar_events(
+        result = await server.find_calendar_events(
             start=START,
             end=END,
         )
@@ -617,7 +713,7 @@ def test_find_calendar_events_without_title():
 
     mock_range.assert_called_once_with(START, END)
 
-    mock_search.assert_called_once_with(
+    mock_search.assert_awaited_once_with(
         parsed_start,
         parsed_end,
         None,
@@ -629,8 +725,9 @@ def test_find_calendar_events_without_title():
 # --------------------------------------------------
 
 
-def test_find_similar_calendar_events():
-
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_find_similar_calendar_events():
     expected = [
         {
             "event": {
@@ -641,9 +738,13 @@ def test_find_similar_calendar_events():
         }
     ]
 
-    parsed_start = datetime(2026, 11, 10, 10, 0, tzinfo=TZ)
+    parsed_start = datetime(
+        2026, 11, 10, 10, 0, tzinfo=TZ
+    )
 
-    parsed_end = datetime(2026, 11, 10, 11, 0, tzinfo=TZ)
+    parsed_end = datetime(
+        2026, 11, 10, 11, 0, tzinfo=TZ
+    )
 
     with (
         patch(
@@ -652,10 +753,11 @@ def test_find_similar_calendar_events():
         ) as mock_range,
         patch(
             "server.find_similar_events",
+            new_callable=AsyncMock,
             return_value=expected,
         ) as mock_similar,
     ):
-        result = server.find_similar_calendar_events(
+        result = await server.find_similar_calendar_events(
             title="Team Meeting",
             start=START,
             end=END,
@@ -665,7 +767,7 @@ def test_find_similar_calendar_events():
 
     mock_range.assert_called_once_with(START, END)
 
-    mock_similar.assert_called_once_with(
+    mock_similar.assert_awaited_once_with(
         "Team Meeting",
         parsed_start,
         parsed_end,
@@ -681,7 +783,9 @@ def test_find_similar_calendar_events():
     "period",
     ["day", "week", "month"],
 )
-def test_get_calendar_overview(period):
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_get_calendar_overview(period):
     expected = {
         "total_events": 2,
         "events": [],
@@ -689,24 +793,27 @@ def test_get_calendar_overview(period):
 
     with patch(
         "server.get_calendar_summary",
+        new_callable=AsyncMock,
         return_value=expected,
     ) as mock_summary:
-        result = server.get_calendar_overview(
+        result = await server.get_calendar_overview(
             period=period,
             value="2026-11-10",
         )
 
     assert result == expected
 
-    mock_summary.assert_called_once_with(
+    mock_summary.assert_awaited_once_with(
         period,
         "2026-11-10",
     )
 
 
-def test_get_calendar_overview_rejects_invalid_period():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_get_calendar_overview_rejects_invalid_period():
     with pytest.raises(Exception):
-        server.get_calendar_overview(
+        await server.get_calendar_overview(
             period="year",
             value="2026",
         )
@@ -717,15 +824,21 @@ def test_get_calendar_overview_rejects_invalid_period():
 # --------------------------------------------------
 
 
-def test_check_calendar_availability():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_check_calendar_availability():
     expected = {
         "available": True,
         "busy_periods": [],
     }
 
-    parsed_start = datetime(2026, 11, 10, 10, 0, tzinfo=TZ)
+    parsed_start = datetime(
+        2026, 11, 10, 10, 0, tzinfo=TZ
+    )
 
-    parsed_end = datetime(2026, 11, 10, 11, 0, tzinfo=TZ)
+    parsed_end = datetime(
+        2026, 11, 10, 11, 0, tzinfo=TZ
+    )
 
     with (
         patch(
@@ -734,17 +847,18 @@ def test_check_calendar_availability():
         ),
         patch(
             "server.check_availability",
+            new_callable=AsyncMock,
             return_value=expected,
         ) as mock_availability,
     ):
-        result = server.check_calendar_availability(
+        result = await server.check_calendar_availability(
             start=START,
             end=END,
         )
 
     assert result == expected
 
-    mock_availability.assert_called_once_with(
+    mock_availability.assert_awaited_once_with(
         parsed_start,
         parsed_end,
     )
@@ -755,7 +869,9 @@ def test_check_calendar_availability():
 # --------------------------------------------------
 
 
-def test_suggest_available_slots():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_suggest_available_slots():
     expected = [
         {
             "start": START,
@@ -763,14 +879,20 @@ def test_suggest_available_slots():
         }
     ]
 
-    parsed_start = datetime(2026, 11, 10, 10, 0, tzinfo=TZ)
-    parsed_end = datetime(2026, 11, 10, 11, 0, tzinfo=TZ)
+    parsed_start = datetime(
+        2026, 11, 10, 10, 0, tzinfo=TZ
+    )
+
+    parsed_end = datetime(
+        2026, 11, 10, 11, 0, tzinfo=TZ
+    )
 
     with patch(
         "server.get_available_slots",
+        new_callable=AsyncMock,
         return_value=expected,
     ) as mock_slots:
-        result = server.suggest_available_slots(
+        result = await server.suggest_available_slots(
             start=START,
             end=END,
             duration_minutes=45,
@@ -778,7 +900,7 @@ def test_suggest_available_slots():
 
     assert result == expected
 
-    mock_slots.assert_called_once_with(
+    mock_slots.assert_awaited_once_with(
         parsed_start,
         parsed_end,
         45,
@@ -789,7 +911,10 @@ def test_suggest_available_slots():
         False,
     )
 
-def test_suggest_available_slots_passes_workday_parameters():
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_suggest_available_slots_passes_workday_parameters():
     expected = [
         {
             "start": START,
@@ -800,15 +925,22 @@ def test_suggest_available_slots_passes_workday_parameters():
     start = "2026-11-10"
     end = "2026-11-17"
 
-    parsed_start = datetime(2026, 11, 10, 0, 0, tzinfo=TZ)
-    # A date-only end is inclusive, so the tool uses the following midnight.
-    parsed_end = datetime(2026, 11, 18, 0, 0, tzinfo=TZ)
+    parsed_start = datetime(
+        2026, 11, 10, 0, 0, tzinfo=TZ
+    )
+
+    # A date-only end is inclusive, so the tool uses
+    # the following midnight.
+    parsed_end = datetime(
+        2026, 11, 18, 0, 0, tzinfo=TZ
+    )
 
     with patch(
         "server.get_available_slots",
+        new_callable=AsyncMock,
         return_value=expected,
     ) as mock_slots:
-        result = server.suggest_available_slots(
+        result = await server.suggest_available_slots(
             start=start,
             end=end,
             duration_minutes=90,
@@ -821,7 +953,7 @@ def test_suggest_available_slots_passes_workday_parameters():
 
     assert result == expected
 
-    mock_slots.assert_called_once_with(
+    mock_slots.assert_awaited_once_with(
         parsed_start,
         parsed_end,
         90,
@@ -833,9 +965,11 @@ def test_suggest_available_slots_passes_workday_parameters():
     )
 
 
-def test_suggest_available_slots_rejects_non_positive_duration():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_suggest_available_slots_rejects_non_positive_duration():
     with pytest.raises(Exception):
-        server.suggest_available_slots(
+        await server.suggest_available_slots(
             start=START,
             end=END,
             duration_minutes=0,
@@ -847,7 +981,9 @@ def test_suggest_available_slots_rejects_non_positive_duration():
 # --------------------------------------------------
 
 
-def test_get_calendar_list_returns_selected_calendar_fields():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_get_calendar_list_returns_selected_calendar_fields():
     calendars = [
         {
             "id": "primary",
@@ -865,9 +1001,10 @@ def test_get_calendar_list_returns_selected_calendar_fields():
 
     with patch(
         "server.list_calendars",
+        new_callable=AsyncMock,
         return_value=calendars,
     ) as mock_list:
-        result = server.get_calendar_list()
+        result = await server.get_calendar_list()
 
     assert result == [
         {
@@ -884,12 +1021,18 @@ def test_get_calendar_list_returns_selected_calendar_fields():
         },
     ]
 
-    mock_list.assert_called_once_with()
+    mock_list.assert_awaited_once_with()
 
 
-def test_get_calendar_list_returns_empty_list():
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_get_calendar_list_returns_empty_list():
     with patch(
         "server.list_calendars",
+        new_callable=AsyncMock,
         return_value=[],
-    ):
-        assert server.get_calendar_list() == []
+    ) as mock_list:
+        result = await server.get_calendar_list()
+
+    assert result == []
+    mock_list.assert_awaited_once_with()

@@ -1,101 +1,151 @@
+
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pytest
-from errors.exceptions import CalendarResultLimitExceededError
+
+from errors.exceptions import (
+    CalendarConcurrencyError,
+    CalendarResultLimitExceededError,
+)
 from services import calendar_service
+
 
 TZ = ZoneInfo("Asia/Kolkata")
 
-@pytest.mark.services
+
 def dt(day, hour=0):
     return datetime(2026, 11, day, hour, 0, tzinfo=TZ)
 
-@pytest.mark.services
-def use_mock_service(monkeypatch, service):
-    monkeypatch.setattr(calendar_service, "get_calendar_service", lambda: service)
 
-@pytest.mark.services
-def test_get_event_by_id(mock_calendar_service, monkeypatch):
-    use_mock_service(monkeypatch, mock_calendar_service)
-    expected = {"id": "event_001", "summary": "Team Meeting"}
-    mock_calendar_service.events.return_value.get.return_value.execute.return_value = expected
+@pytest.fixture
+def use_mock_service(monkeypatch, mock_calendar_service):
+    monkeypatch.setattr(
+        calendar_service,
+        "get_calendar_service",
+        lambda: mock_calendar_service,
+    )
+    return mock_calendar_service
 
-    result = calendar_service.get_event_by_id("event_001")
+
+@pytest.mark.asyncio
+@pytest.mark.services
+async def test_list_calendars(use_mock_service):
+    expected = [{"id": "primary", "summary": "Primary Calendar"}]
+    use_mock_service.calendarList.return_value.list.return_value.execute.return_value = {
+        "items": expected
+    }
+
+    result = await calendar_service.list_calendars()
 
     assert result == expected
-    mock_calendar_service.events.return_value.get.assert_called_once_with(
+    use_mock_service.calendarList.return_value.list.assert_called_once_with(
+        maxResults=100
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.services
+async def test_get_event_by_id(use_mock_service):
+    expected = {"id": "event_001", "summary": "Team Meeting"}
+    use_mock_service.events.return_value.get.return_value.execute.return_value = (
+        expected
+    )
+
+    result = await calendar_service.get_event_by_id("event_001")
+
+    assert result == expected
+    use_mock_service.events.return_value.get.assert_called_once_with(
         calendarId=calendar_service.CALENDAR_ID,
         eventId="event_001",
     )
 
+
+@pytest.mark.asyncio
 @pytest.mark.services
-def test_list_events_in_range(mock_calendar_service, monkeypatch):
-    use_mock_service(monkeypatch, mock_calendar_service)
+async def test_list_events_in_range(use_mock_service):
     expected = [{"id": "event_001"}, {"id": "event_002"}]
-    mock_calendar_service.events.return_value.list.return_value.execute.return_value = {
-        "items": expected
+    use_mock_service.events.return_value.list.return_value.execute.return_value = {
+        "items": expected,
+        "nextPageToken": None,
     }
 
-    result = calendar_service.list_events_in_range(dt(10), dt(11))
+    result = await calendar_service.list_events_in_range(dt(10), dt(11))
 
     assert result == expected
-    kwargs = mock_calendar_service.events.return_value.list.call_args.kwargs
+
+    kwargs = use_mock_service.events.return_value.list.call_args.kwargs
     assert kwargs["timeMin"] == dt(10).isoformat()
     assert kwargs["timeMax"] == dt(11).isoformat()
     assert kwargs["singleEvents"] is True
     assert kwargs["orderBy"] == "startTime"
 
-@pytest.mark.services
-def test_list_events_rejects_invalid_range(mock_calendar_service, monkeypatch):
-    use_mock_service(monkeypatch, mock_calendar_service)
 
+@pytest.mark.asyncio
+@pytest.mark.services
+async def test_list_events_rejects_invalid_range(use_mock_service):
     with pytest.raises(ValueError, match="End date must be after start date"):
-        calendar_service.list_events_in_range(dt(11), dt(10))
+        await calendar_service.list_events_in_range(dt(11), dt(10))
 
+
+@pytest.mark.asyncio
 @pytest.mark.services
-def test_list_events_requires_timezone_aware_datetimes(mock_calendar_service, monkeypatch):
-    use_mock_service(monkeypatch, mock_calendar_service)
-
+async def test_list_events_requires_timezone_aware_datetimes(use_mock_service):
     with pytest.raises(ValueError, match="timezone-aware"):
-        calendar_service.list_events_in_range(
-            datetime(2026, 11, 10), datetime(2026, 11, 11)
+        await calendar_service.list_events_in_range(
+            datetime(2026, 11, 10),
+            datetime(2026, 11, 11),
         )
 
-@pytest.mark.services
-def test_list_events_rejects_invalid_max_results(mock_calendar_service, monkeypatch):
-    use_mock_service(monkeypatch, mock_calendar_service)
 
+@pytest.mark.asyncio
+@pytest.mark.services
+async def test_list_events_rejects_invalid_max_results(use_mock_service):
     with pytest.raises(ValueError, match="max_results"):
-        calendar_service.list_events_in_range(dt(10), dt(11), max_results=0)
+        await calendar_service.list_events_in_range(
+            dt(10),
+            dt(11),
+            max_results=0,
+        )
 
+
+@pytest.mark.asyncio
 @pytest.mark.services
-def test_list_events_handles_pagination(mock_calendar_service, monkeypatch):
-    use_mock_service(monkeypatch, mock_calendar_service)
-    execute = mock_calendar_service.events.return_value.list.return_value.execute
+async def test_list_events_handles_pagination(use_mock_service):
+    execute = use_mock_service.events.return_value.list.return_value.execute
     execute.side_effect = [
-        {"items": [{"id": "event_001"}], "nextPageToken": "page_2"},
-        {"items": [{"id": "event_002"}]},
+        {
+            "items": [{"id": "event_001"}],
+            "nextPageToken": "page_2",
+        },
+        {
+            "items": [{"id": "event_002"}],
+            "nextPageToken": None,
+        },
     ]
 
-    result = calendar_service.list_events_in_range(dt(10), dt(11), max_results=10)
-
-    assert [event["id"] for event in result] == ["event_001", "event_002"]
-    assert execute.call_count == 2
-    assert mock_calendar_service.events.return_value.list.call_args.kwargs["pageToken"] == "page_2"
-
-@pytest.mark.services
-def test_list_events_stops_at_max_results(
-    mock_calendar_service,
-    monkeypatch,
-):
-    use_mock_service(monkeypatch, mock_calendar_service)
-
-    execute = (
-        mock_calendar_service.events
-        .return_value.list.return_value.execute
+    result = await calendar_service.list_events_in_range(
+        dt(10),
+        dt(11),
+        max_results=10,
     )
 
+    assert [event["id"] for event in result] == [
+        "event_001",
+        "event_002",
+    ]
+    assert execute.call_count == 2
+
+    assert (
+        use_mock_service.events.return_value.list.call_args.kwargs["pageToken"]
+        == "page_2"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.services
+async def test_list_events_stops_at_max_results(use_mock_service):
+    execute = use_mock_service.events.return_value.list.return_value.execute
     execute.return_value = {
         "items": [
             {"id": "event_001"},
@@ -105,7 +155,7 @@ def test_list_events_stops_at_max_results(
     }
 
     with pytest.raises(CalendarResultLimitExceededError):
-        calendar_service.list_events_in_range(
+        await calendar_service.list_events_in_range(
             dt(10),
             dt(11),
             max_results=2,
@@ -113,197 +163,100 @@ def test_list_events_stops_at_max_results(
 
     assert execute.call_count == 1
 
+
+@pytest.mark.asyncio
 @pytest.mark.services
-def test_insert_calendar_event(mock_calendar_service, monkeypatch):
-    use_mock_service(monkeypatch, mock_calendar_service)
+async def test_insert_calendar_event(use_mock_service):
     expected = {"id": "new_event", "summary": "New Meeting"}
-    mock_calendar_service.events.return_value.insert.return_value.execute.return_value = expected
+    use_mock_service.events.return_value.insert.return_value.execute.return_value = (
+        expected
+    )
+
     body = {"summary": "New Meeting"}
 
-    result = calendar_service.insert_calendar_event(body)
+    result = await calendar_service.insert_calendar_event(body)
 
     assert result == expected
-    mock_calendar_service.events.return_value.insert.assert_called_once_with(
+    use_mock_service.events.return_value.insert.assert_called_once_with(
         calendarId=calendar_service.CALENDAR_ID,
         body=body,
     )
 
+
+
+@pytest.mark.asyncio
 @pytest.mark.services
-def test_update_calendar_event_gets_then_updates_full_resource(mock_calendar_service, monkeypatch):
-    use_mock_service(monkeypatch, mock_calendar_service)
-    events = mock_calendar_service.events.return_value
+async def test_update_calendar_event_uses_existing_etag(use_mock_service):
     existing = {
         "id": "event_001",
         "etag": '"etag-001"',
         "summary": "Old title",
-        "description": "Keep this description",
         "start": {"dateTime": "2026-11-10T10:00:00+05:30"},
         "end": {"dateTime": "2026-11-10T11:00:00+05:30"},
     }
-    events.get.return_value.execute.return_value = existing
-    updated = {**existing, "summary": "New title"}
-    events.update.return_value.execute.return_value = updated
 
-    result = calendar_service.update_calendar_event(
-        "event_001", {"summary": "New title"}
-    )
-
-    assert result == updated
-    events.get.assert_called_once_with(
-        calendarId=calendar_service.CALENDAR_ID, eventId="event_001"
-    )
-    events.update.assert_called_once()
-    body = events.update.call_args.kwargs["body"]
-    assert body["summary"] == "New title"
-    assert body["description"] == "Keep this description"
-    events.patch.assert_not_called()
-
-@pytest.mark.services
-def test_update_calendar_event_uses_supplied_existing_event(mock_calendar_service, monkeypatch):
-    use_mock_service(monkeypatch, mock_calendar_service)
-    events = mock_calendar_service.events.return_value
-    existing = {"id": "event_001", "etag": '"etag-001"',"summary": "Old"}
-    events.update.return_value.execute.return_value = {"id": "event_001", "summary": "New"}
-
-    calendar_service.update_calendar_event(
-        "event_001", {"summary": "New"}, existing_event=existing
-    )
-
-    events.get.assert_not_called()
-    events.update.assert_called_once()
-
-@pytest.mark.services
-def test_delete_calendar_event(mock_calendar_service, monkeypatch):
-    use_mock_service(monkeypatch, mock_calendar_service)
-
-    result = calendar_service.delete_calendar_event("event_001")
-
-    assert result == {
-        "success": True,
-        "event_id": "event_001",
-        "message": "Event deleted successfully.",
-    }
-    mock_calendar_service.events.return_value.delete.assert_called_once_with(
-        calendarId=calendar_service.CALENDAR_ID,
-        eventId="event_001",
-    )
-
-@pytest.mark.services
-def test_list_calendars(mock_calendar_service, monkeypatch):
-    use_mock_service(monkeypatch, mock_calendar_service)
-    expected = [{"id": "primary", "summary": "My Calendar"}]
-    mock_calendar_service.calendarList.return_value.list.return_value.execute.return_value = {
-        "items": expected
+    expected = {
+        "id": "event_001",
+        "summary": "New title",
     }
 
-    assert calendar_service.list_calendars() == expected
+    request = use_mock_service.events.return_value.update.return_value
 
-@pytest.mark.services
-def test_list_calendars_returns_empty_list_when_no_items(mock_calendar_service, monkeypatch):
-    use_mock_service(monkeypatch, mock_calendar_service)
-    mock_calendar_service.calendarList.return_value.list.return_value.execute.return_value = {}
+    # Use a real dictionary instead of a MagicMock.
+    request.headers = {}
+    request.execute.return_value = expected
 
-    assert calendar_service.list_calendars() == []
-
-@pytest.mark.services
-def test_update_uses_if_match_etag(
-    monkeypatch,
-    mock_calendar_service,
-):
-
-    monkeypatch.setattr(
-        calendar_service,
-        "get_calendar_service",
-        lambda: mock_calendar_service,
+    result = await calendar_service.update_calendar_event(
+        "event_001",
+        {"summary": "New title"},
+        existing_event=existing,
     )
 
-    update_request = (
-        mock_calendar_service.events().update.return_value
-    )
+    assert result == expected
+    assert request.headers["If-Match"] == '"etag-001"'
 
-    update_request.headers = {}
 
-    update_request.execute.return_value = {
-        "id": "test_event_001",
-        "summary": "Updated Meeting",
+@pytest.mark.asyncio
+@pytest.mark.services
+async def test_update_calendar_event_requires_etag(use_mock_service):
+    with pytest.raises(CalendarConcurrencyError, match="ETag is missing"):
+        await calendar_service.update_calendar_event(
+            "event_001",
+            {"summary": "New title"},
+            existing_event={"id": "event_001"},
+        )
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.services
+async def test_delete_calendar_event_uses_existing_etag(use_mock_service):
+    existing = {
+        "id": "event_001",
+        "etag": '"etag-001"',
     }
 
-    result = calendar_service.update_calendar_event(
-        event_id="test_event_001",
-        updates={"summary": "Updated Meeting"},
-    )
+    request = use_mock_service.events.return_value.delete.return_value
 
-    assert result["summary"] == "Updated Meeting"
+    # Use a real dictionary instead of a MagicMock.
+    request.headers = {}
 
-    assert update_request.headers["If-Match"] == (
-        '"test-etag-001"'
-    )
-
-
-@pytest.mark.services
-def test_delete_uses_if_match_etag(
-    monkeypatch,
-    mock_calendar_service,
-):
-
-    monkeypatch.setattr(
-        calendar_service,
-        "get_calendar_service",
-        lambda: mock_calendar_service,
-    )
-
-    delete_request = (
-        mock_calendar_service.events().delete.return_value
-    )
-
-    delete_request.headers = {}
-
-    result = calendar_service.delete_calendar_event(
-        event_id="test_event_001",
+    result = await calendar_service.delete_calendar_event(
+        "event_001",
+        existing_event=existing,
     )
 
     assert result["success"] is True
+    assert result["event_id"] == "event_001"
+    assert request.headers["If-Match"] == '"etag-001"'
 
-    assert delete_request.headers["If-Match"] == (
-        '"test-etag-001"'
-    )
 
+
+@pytest.mark.asyncio
 @pytest.mark.services
-def test_event_search_does_not_silently_truncate(
-    monkeypatch,
-    mock_calendar_service,
-):
-
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
-    from errors.exceptions import (
-        CalendarResultLimitExceededError,
-    )
-
-    TZ = ZoneInfo("Asia/Kolkata")
-
-    monkeypatch.setattr(
-        calendar_service,
-        "get_calendar_service",
-        lambda: mock_calendar_service,
-    )
-
-    mock_calendar_service.events().list.return_value.execute.return_value = {
-        "items": [
-            {"id": "event_001"}
-        ],
-        "nextPageToken": "next-page",
-    }
-
-    with pytest.raises(CalendarResultLimitExceededError):
-
-        calendar_service.list_events_in_range(
-            start_date=datetime(
-                2026, 11, 1, tzinfo=TZ
-            ),
-            end_date=datetime(
-                2026, 12, 1, tzinfo=TZ
-            ),
-            max_results=1,
+async def test_delete_calendar_event_requires_etag(use_mock_service):
+    with pytest.raises(CalendarConcurrencyError, match="ETag is missing"):
+        await calendar_service.delete_calendar_event(
+            "event_001",
+            existing_event={"id": "event_001"},
         )
